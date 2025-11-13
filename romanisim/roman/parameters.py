@@ -1,6 +1,6 @@
 import os
 
-import galsim.Image as Image
+from galsim import Image
 import numpy as np
 
 from astropy.io import ascii

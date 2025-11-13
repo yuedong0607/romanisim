@@ -9,11 +9,10 @@ import importlib.resources
 import os
 
 import numpy as np
-
 from astropy.io import ascii
 from galsim import Bandpass, LookupTable
+from galsim.errors import galsim_warn
 
-from .. import log
 from .parameters import band_name_map, roman_tech_repo_path
 
 effarea_root = os.path.join(
@@ -130,12 +129,8 @@ def get_zodi_bkgnd(ecl_lat, ecl_dlon, lambda_min, lambda_max, Tlambda, T):
     ilon = 0
     while dlonTable[ilon + 1] < ecl_dlon and ilon < nlon - 2:
         ilon += 1
-    frlat = (ecl_lat - betaTable[ilat]) / (
-        betaTable[ilat + 1] - betaTable[ilat]
-    )
-    frlon = (ecl_dlon - dlonTable[ilon]) / (
-        dlonTable[ilon + 1] - dlonTable[ilon]
-    )
+    frlat = (ecl_lat - betaTable[ilat]) / (betaTable[ilat + 1] - betaTable[ilat])
+    frlon = (ecl_dlon - dlonTable[ilon]) / (dlonTable[ilon + 1] - dlonTable[ilon])
     sky05 = np.exp(
         np.log(skyTable[ilat + (ilon) * nlat]) * (1.0 - frlat) * (1.0 - frlon)
         + np.log(skyTable[ilat + (ilon + 1) * nlat]) * (1.0 - frlat) * (frlon)
@@ -146,9 +141,7 @@ def get_zodi_bkgnd(ecl_lat, ecl_dlon, lambda_min, lambda_max, Tlambda, T):
     zodi_tot = 0.0
     dlambda = (lambda_max - lambda_min) / float(Nlambda)
     for ilambda in range(Nlambda):
-        lambda_ = lambda_min + (ilambda + 0.5) / Nlambda * (
-            lambda_max - lambda_min
-        )
+        lambda_ = lambda_min + (ilambda + 0.5) / Nlambda * (lambda_max - lambda_min)
         # /* Solar spectrum at this wavelength: F_lambda/F_{0.5um} */
         index_lambda = 100 * np.log(lambda_) / np.log(10.0) + 80
         ilam = int(np.floor(index_lambda))
@@ -272,7 +265,7 @@ def getBandpasses(
 
     @returns A dictionary containing bandpasses for all Roman imaging filters.
     """
-    from . import collecting_area, non_imaging_bands
+    from .parameters import collecting_area, non_imaging_bands
 
     if SCA_ID is None:
         # Begin by reading in the file containing the info.
@@ -306,7 +299,7 @@ def getBandpasses(
     tmp_thin_dict = {}
     if default_thin_trunc:
         if len(kwargs) > 0:
-            log.warning(
+            galsim_warn(
                 "default_thin_trunc is true, but other arguments have been passed"
                 " to getBandpasses().  Using the other arguments and ignoring"
                 " default_thin_trunc."
@@ -355,7 +348,7 @@ def getBandpasses(
         else:
             bp._sky_level = np.zeros_like(sky_data[2 + index, :])
             for i in range(len(ecliptic_lat)):
-                bp._sky_level = get_zodi_bkgnd(
+                bp._sky_level[i] = get_zodi_bkgnd(
                     ecliptic_lat[i],
                     ecliptic_lon[i],
                     0.22,
