@@ -2,9 +2,12 @@ import asdf
 import crds
 import roman_datamodels
 
-from .parameters import default_parameters_dictionary, gain, nborder
+from .parameters import default_parameters_dictionary, nborder
 
 __all__ = ["Gain"]
+
+# Default gain value
+gain = 1.0
 
 
 class Gain(object):

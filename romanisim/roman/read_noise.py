@@ -4,10 +4,12 @@ import galsim
 import numpy as np
 import roman_datamodels
 
-from .parameters import default_parameters_dictionary, nborder, read_noise
+from .parameters import default_parameters_dictionary, nborder
 
 __all__ = ["ReadNoise"]
 
+# Default read noise value
+read_noise = 8.5  # e-
 
 class ReadNoise(object):
     def __init__(self, usecrds=False, metadata=None, rng=None, seed=None):

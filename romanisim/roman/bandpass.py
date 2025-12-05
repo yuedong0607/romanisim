@@ -1,25 +1,29 @@
-"""
-@file roman_bandpass.py
-
-Part of the Roman Space Telescope module.  This file includes any routines needed to define the
-Roman ST bandpasses.
-"""
-
 import importlib.resources
 import os
 
 import numpy as np
 from astropy.io import ascii
+from astropy import units as u
 from galsim import Bandpass, LookupTable
 from galsim.errors import galsim_warn
 
-from .parameters import band_name_map, roman_tech_repo_path
+from .parameters import roman2galsim_bandpass, roman_tech_repo_path
 
 effarea_root = os.path.join(
     roman_tech_repo_path, "data/WideFieldInstrument/Imaging/EffectiveAreas/"
 )
 
 data_root = str(importlib.resources.files("romanisim").joinpath("data/"))
+
+# to go from calibrated fluxes in maggies to counts in the Roman bands
+# we need to multiply by a constant determined by the AB magnitude
+# system and the shape of the Roman bands.
+# The constant is \int (3631 Jy) (1/hv) T(v) dv
+# T(v) should be the effective area at each wavelength, I guess
+# divided by some nominal overall effective area.
+
+# AB Zero Spectral Flux Density
+ABZeroSpFluxDens = 3631e-23 * u.erg / (u.s * u.cm**2 * u.hertz)
 
 
 def get_zodi_bkgnd(ecl_lat, ecl_dlon, lambda_min, lambda_max, Tlambda, T):
@@ -282,8 +286,8 @@ def getBandpasses(
         )
         data = ascii.read(datafile)
         for index, bp_name in enumerate(data.dtype.names[1:]):
-            if bp_name in band_name_map:
-                data.rename_column(bp_name, band_name_map[bp_name])
+            if bp_name in roman2galsim_bandpass:
+                data.rename_column(bp_name, roman2galsim_bandpass[bp_name])
 
     wave = 1000.0 * data["Wave"]
     # Read in and manipulate the sky background info.

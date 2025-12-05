@@ -7,12 +7,14 @@ from astropy import units as u
 
 from .parameters import (
     default_parameters_dictionary,
-    gain,
-    nborder,
-    nonlinearity_beta,
+    nborder
 )
+from .gain import gain
 
 __all__ = ["NLfunc", "Nonlinearity"]
+
+# Default nonlinearity beta value
+nonlinearity_beta = -6.0e-7
 
 
 # def print_ram_usage(message=""):

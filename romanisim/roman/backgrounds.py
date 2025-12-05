@@ -1,30 +1,43 @@
-# Copyright (c) 2012-2023 by the GalSim developers team on GitHub
-# https://github.com/GalSim-developers
-#
-# This file is part of GalSim: The modular galaxy image simulation toolkit.
-# https://github.com/GalSim-developers/GalSim
-#
-# GalSim is free software: redistribution and use in source and binary forms,
-# with or without modification, are permitted provided that the following
-# conditions are met:
-#
-# 1. Redistributions of source code must retain the above copyright notice, this
-#    list of conditions, and the disclaimer given in the accompanying LICENSE
-#    file.
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-#    this list of conditions, and the disclaimer given in the documentation
-#    and/or other materials provided with the distribution.
-#
-"""
-@file roman_backgrounds.py
-
-Part of the Roman Space Telescope module.  This file includes any routines needed to define the
-background level, for which the main contribution is zodiacal light.
-"""
-
+import os
 import numpy as np
+from astropy.io import ascii
 
 from galsim import CelestialCoord, GalSimValueError, degrees, radians
+from .parameters import roman_tech_repo_path, roman2galsim_bandpass
+
+# These are from https://roman.gsfc.nasa.gov/science/WFI_technical.html, as of October, 2023
+thermal_backgrounds = {
+    "R062": 0.00,  # e-/pix/s
+    "Z087": 0.00,
+    "Y106": 0.00,
+    "J129": 0.00,
+    "H158": 0.04,
+    "F184": 0.17,
+    "K213": 4.52,
+    "W146": 0.98,
+    "SNPrism": 0.00,
+    "Grism_0thOrder": 0.00,
+    "Grism_1stOrder": 0.00,
+}
+
+# Update thermal background values with ones from roman-technical-information
+thermal_backgrounds_summary = os.path.join(
+    roman_tech_repo_path,
+    "data",
+    "WideFieldInstrument",
+    "Imaging",
+    "Backgrounds",
+    "internal_thermal_backgrounds.ecsv",
+)
+try:
+    data = ascii.read(thermal_backgrounds_summary)
+    for i in range(len(data["filter"])):
+        band_name = roman2galsim_bandpass[data["filter"][i]]
+        thermal_backgrounds[band_name] = data[i]["rate"]
+except RuntimeError as e:
+    print(
+        f" {e} Failed to fetch internal_thermal_backgrounds.ecsv, use default value for thermal_backgrounds"
+    )
 
 
 def getSkyLevel(bandpass, world_pos=None, exptime=None, epoch=2025, date=None):

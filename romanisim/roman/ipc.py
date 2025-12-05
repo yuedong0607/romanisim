@@ -2,13 +2,25 @@ import asdf
 import crds
 import numpy as np
 import roman_datamodels
+from galsim import Image
 
 from scipy import ndimage
 
-from .parameters import default_parameters_dictionary, ipc_kernel
+from .parameters import default_parameters_dictionary
 
 __all__ = ["IPC"]
 
+# Default IPC kernel
+# IPC kernel is unnormalized at first.  We will normalize it.
+ipc_kernel = np.array(
+    [
+        [0.001269938, 0.015399776, 0.001199862],
+        [0.013800177, 1.0, 0.015600367],
+        [0.001270391, 0.016129619, 0.001200137],
+    ]
+)
+ipc_kernel /= np.sum(ipc_kernel)
+ipc_kernel = Image(ipc_kernel)
 
 class IPC(object):
     def __init__(self, usecrds=False, metadata=None):

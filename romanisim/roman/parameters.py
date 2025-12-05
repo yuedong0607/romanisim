@@ -1,24 +1,19 @@
 import os
 
-from galsim import Image
 import numpy as np
-
 from astropy.io import ascii
 from astropy.time import Time
 
 ######################################################################################################
 # Default values
 ######################################################################################################
-gain = 1.0
 pixel_scale = 0.11  # arcsec / pixel
 diameter = 2.36  # meters
 obscuration = 0.32
 collecting_area = 3.757e4  # cm^2, from Cycle 7
 exptime = 139.8  # s
-dark_current = 0.015  # e-/pix/s
-nonlinearity_beta = -6.0e-7
-reciprocity_alpha = 0.0065
-read_noise = 8.5  # e-
+# nonlinearity_beta = -6.0e-7
+# reciprocity_alpha = 0.0065
 n_dithers = 6
 nborder = 4  # number of border pixels used for reference pixels.
 # Physical pixel size
@@ -29,6 +24,16 @@ n_pix_tot = 4096
 n_pix = 4088
 jitter_rms = 0.014
 charge_diffusion = 0.1
+
+# Basic Roman reference info, with lengths in mm.
+pixel_size_mm = 0.01
+focal_length = 18714
+
+# V2/V3 coordinates of "center" of WFI array (convention)
+v2v3_wficen = (1546.3846181707652, -892.7916365721071)  # arcsec
+
+# angle of V3 relative to +Y
+V3IdlYAngle = -60
 
 # Maxinum allowed angle from the telecope solar panels to the sun in degrees.
 max_sun_angle = 36.0
@@ -48,32 +53,19 @@ shortwave_bands = [
     "W146",
 ] + non_imaging_bands
 
-band_name_map = {
-    "F062": "R062",
-    "F087": "Z087",
-    "F106": "Y106",
-    "F129": "J129",
-    "F158": "H158",
-    "F146": "W146",
-    "F213": "K213",
-    "Prism": "SNPrism",
-}
+# provide some translation dictionaries for the mapping from
+# the galsim bandpass names to the Roman bandpass names and vice versa.
+# it would be nice to be agnostic about which one we use.
+galsim_bandpasses = [
+    'R062', 'Z087', 'Y106', 'J129', 'H158', 'F184', 'K213', 'W146']
+galsim2roman_bandpass = {x: 'F' + x[1:] for x in galsim_bandpasses}
+roman2galsim_bandpass = {v: k for k, v in galsim2roman_bandpass.items()}
 
-# These are from https://roman.gsfc.nasa.gov/science/WFI_technical.html, as of October, 2023
-thermal_backgrounds = {
-    "R062": 0.00,  # e-/pix/s
-    "Z087": 0.00,
-    "Y106": 0.00,
-    "J129": 0.00,
-    "H158": 0.04,
-    "F184": 0.17,
-    "K213": 4.52,
-    "W146": 0.98,
-    "SNPrism": 0.00,
-    "Grism_0thOrder": 0.00,
-    "Grism_1stOrder": 0.00,
-}
+# provide some no-ops if we are given a key in the right bandpass
+galsim2roman_bandpass.update(**{k: k for k in roman2galsim_bandpass})
+roman2galsim_bandpass.update(**{k: k for k in galsim_bandpasses})
 
+# Persistence coefficients
 persistence_coefficients = (
     np.array(
         [
@@ -90,67 +82,19 @@ persistence_coefficients = (
     / 100.0
 )
 
-# IPC kernel is unnormalized at first.  We will normalize it.
-ipc_kernel = np.array(
-    [
-        [0.001269938, 0.015399776, 0.001199862],
-        [0.013800177, 1.0, 0.015600367],
-        [0.001270391, 0.016129619, 0.001200137],
-    ]
-)
-ipc_kernel /= np.sum(ipc_kernel)
-ipc_kernel = Image(ipc_kernel)
-
 # parameters in the fermi model = [ A, x0, dx, a, r, half_well]
 # The following parameters are for H4RG-lo, the conservative model for low influence level x.
 # The info and implementation can be found in roman_detectors.applyPersistence() and roman_detectors.fermi_linear().
-persistence_fermi_parameters = np.array(
-    [0.017, 60000.0, 50000.0, 0.045, 1.0, 50000.0]
-)
+persistence_fermi_parameters = np.array([0.017, 60000.0, 50000.0, 0.045, 1.0, 50000.0])
 
 ######################################################################################################
 # [TODO] Temporary implementation for accessing roman-technical-information repo
 ######################################################################################################
-roman_tech_repo_path = (
-    "/hpc/home/yf194/Work/projects/roman-technical-information/"
-)
-FPSPerformance_path = os.path.join(
-    roman_tech_repo_path, "data", "WideFieldInstrument", "FPSPerformance"
-)
-dark_current_summary = os.path.join(
-    FPSPerformance_path, "WFI_Dark_current_summary.ecsv"
-)
-# Dark current
-# Columns in the summary file: ['SCU', 'SCA', 'Dark Current - Median', 'Dark Current - Mean', 'Percentage Passing Requirement']
-# The 18th (counting from 0) row: All detectors (MAP)
-try:
-    data = ascii.read(dark_current_summary)
-    dark_current = data[18]["Dark Current - Median"]
-except RuntimeError as e:
-    print(
-        f" {e} Failed to fetch WFI_Dark_current_summary.ecsv, use default value for dark_current"
-    )
-thermal_backgrounds_summary = os.path.join(
-    roman_tech_repo_path,
-    "data",
-    "WideFieldInstrument",
-    "Imaging",
-    "Backgrounds",
-    "internal_thermal_backgrounds.ecsv",
-)
-try:
-    data = ascii.read(thermal_backgrounds_summary)
-    for i in range(len(data["filter"])):
-        band_name = (
-            band_name_map[data["filter"][i]]
-            if data["filter"][i] in band_name_map
-            else data["filter"][i]
-        )
-        thermal_backgrounds[band_name] = data[i]["rate"]
-except RuntimeError as e:
-    print(
-        f" {e} Failed to fetch internal_thermal_backgrounds.ecsv, use default value for thermal_backgrounds"
-    )
+roman_tech_repo_path = "/hpc/home/yf194/Work/projects/roman-technical-information/"
+# FPSPerformance_path = os.path.join(
+#     roman_tech_repo_path, "data", "WideFieldInstrument", "FPSPerformance"
+# )
+
 # persistence_summary = os.path.join(
 #     FPSPerformance_path, "WFI_Persistence_summary.ecsv"
 # )
