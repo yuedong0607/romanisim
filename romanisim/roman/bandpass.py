@@ -264,6 +264,8 @@ def getBandpasses(
                             There is currently no estimate for the thermal background for these
                             bands and they are set to zero arbitrarily.
                             [default: False]
+        SCA_ID:             Return the bandpasses dictionary for the particular SCA if given.
+                            [default: None]
         **kwargs:           Other kwargs are passed to either `Bandpass.thin` or
                             `Bandpass.truncate` as appropriate.
 
