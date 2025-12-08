@@ -1,8 +1,5 @@
-import os
-
 import numpy as np
 
-from astropy.io import ascii
 from astropy.time import Time
 
 ######################################################################################################
