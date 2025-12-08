@@ -11,7 +11,7 @@ __all__ = ["Saturation"]
 
 
 class Saturation(object):
-    def __init__(self, usecrds=False, metadata=None, saturation_level=100000):
+    def __init__(self, usecrds=False, metadata=None, saturation_level=300000):
         self.usecrds = usecrds
         self.metadata = metadata
         self.saturation_level = saturation_level
