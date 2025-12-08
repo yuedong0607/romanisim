@@ -1,13 +1,25 @@
-import numpy as np
 import galsim
+import numpy as np
+
+from romanisim import log
+
 # from .bandpass import galsim2roman_bandpass, roman2galsim_bandpass, getBandpasses
 from .bandpass import getBandpasses
-from romanisim import log
-from .parameters import n_pix, galsim2roman_bandpass, roman2galsim_bandpass
+from .parameters import galsim2roman_bandpass, n_pix, roman2galsim_bandpass
 from .psf_utils import getPSF
 
-def make_one_psf(sca, filter_name, wcs=None, stpsf=True, pix=None,
-                 chromatic=False, oversample=4, extra_convolution=None, **kw):
+
+def make_one_psf(
+    sca,
+    filter_name,
+    wcs=None,
+    stpsf=True,
+    pix=None,
+    chromatic=False,
+    oversample=4,
+    extra_convolution=None,
+    **kw,
+):
     """Make a PSF profile for Roman at a specific detector location.
 
     Can construct both PSFs using galsim's built-in galsim.roman.roman_psfs
@@ -40,30 +52,36 @@ def make_one_psf(sca, filter_name, wcs=None, stpsf=True, pix=None,
     """
     pix = pix if pix is not None else (n_pix // 2, n_pix // 2)
     if wcs is None:
-        log.warning('wcs is None; unlikely to get orientation of PSF correct.')
+        log.warning("wcs is None; unlikely to get orientation of PSF correct.")
     if not stpsf:
         filter_name = roman2galsim_bandpass[filter_name]
-        defaultkw = {'pupil_bin': 8}
+        defaultkw = {"pupil_bin": 8}
         if chromatic:
-            defaultkw['n_waves'] = 10
+            defaultkw["n_waves"] = 10
             bandpass = None
         else:
             bandpass = getBandpasses(AB_zeropoint=True)[filter_name]
             filter_name = None
         defaultkw.update(**kw)
         scapos = galsim.PositionD(*pix) if pix is not None else None
-        res = getPSF(sca, filter_name, wcs=wcs, SCA_pos=scapos,
-                     wavelength=bandpass, **defaultkw)
+        res = getPSF(
+            sca,
+            filter_name,
+            wcs=wcs,
+            SCA_pos=scapos,
+            wavelength=bandpass,
+            **defaultkw,
+        )
         if extra_convolution is not None:
             res = galsim.Convolve(res, extra_convolution)
         return res
     if chromatic:
-        log.warning('romanisim does not yet support chromatic PSFs '
-                    'with stpsf')
+        log.warning("romanisim does not yet support chromatic PSFs with stpsf")
     import stpsf as wpsf
+
     filter_name = galsim2roman_bandpass[filter_name]
     wfi = wpsf.WFI()
-    wfi.detector = f'SCA{sca:02d}'
+    wfi.detector = f"SCA{sca:02d}"
     wfi.filter = filter_name
     wfi.detector_position = pix
     psf = wfi.calc_psf(oversample=oversample, **kw)
@@ -76,7 +94,9 @@ def make_one_psf(sca, filter_name, wcs=None, stpsf=True, pix=None,
         local_jacobian = wcs.local(image_pos=galsim.PositionD(pix)).getMatrix()
         # angle of [du/dx, du/dy]
         ang = np.arctan2(local_jacobian[0, 1], local_jacobian[0, 0])
-        rotmat = np.array([[np.cos(ang), np.sin(ang)], [-np.sin(ang), np.cos(ang)]])
+        rotmat = np.array(
+            [[np.cos(ang), np.sin(ang)], [-np.sin(ang), np.cos(ang)]]
+        )
         newwcs = galsim.JacobianWCS(*(rotmat.ravel() * newscale))
         # we are making a new, orthogonal, isotropic matrix for the PSF with the
         # appropriate pixel scale.  This is intended to be the WCS for the PSF
@@ -102,15 +122,26 @@ def make_one_psf(sca, filter_name, wcs=None, stpsf=True, pix=None,
 
     centroid = None
     intimg = galsim.InterpolatedImage(
-        gimg, normalization='flux', use_true_center=True, offset=centroid)
+        gimg, normalization="flux", use_true_center=True, offset=centroid
+    )
 
     if extra_convolution is not None:
         intimg = galsim.Convolve(intimg, extra_convolution)
 
     return intimg
 
-def make_psf(sca, filter_name, wcs=None, stpsf=True, pix=None,
-             chromatic=False, variable=False, extra_convolution=None, **kw):
+
+def make_psf(
+    sca,
+    filter_name,
+    wcs=None,
+    stpsf=True,
+    pix=None,
+    chromatic=False,
+    variable=False,
+    extra_convolution=None,
+    **kw,
+):
     """Make a PSF profile for Roman.
 
     Optionally supports spatially variable PSFs via interpolation between
@@ -141,23 +172,40 @@ def make_psf(sca, filter_name, wcs=None, stpsf=True, pix=None,
         rendering scenes.
     """
     if not variable:
-        return make_one_psf(sca, filter_name, wcs=wcs, stpsf=stpsf,
-                            pix=pix, chromatic=chromatic,
-                            extra_convolution=extra_convolution, **kw)
+        return make_one_psf(
+            sca,
+            filter_name,
+            wcs=wcs,
+            stpsf=stpsf,
+            pix=pix,
+            chromatic=chromatic,
+            extra_convolution=extra_convolution,
+            **kw,
+        )
     elif pix is not None:
-        raise ValueError('cannot set both pix and variable')
+        raise ValueError("cannot set both pix and variable")
     buf = 49
     # Stpsf complains if we get too close to (0, 0) for some reason.
     # For other corners one can go to within a fraction of a pixel.
     # if we go larger than 49 we have to change some of the tests, which use a 100x100 image.
     corners = dict(
-        ll=[buf, buf], lr=[n_pix - buf, buf],
-        ul=[buf, n_pix - buf], ur=[n_pix - buf, n_pix - buf])
+        ll=[buf, buf],
+        lr=[n_pix - buf, buf],
+        ul=[buf, n_pix - buf],
+        ur=[n_pix - buf, n_pix - buf],
+    )
     psfs = dict()
     for corner, pix in corners.items():
-        psfs[corner] = make_one_psf(sca, filter_name, wcs=wcs, stpsf=stpsf,
-                                    pix=pix, chromatic=chromatic,
-                                    extra_convolution=extra_convolution, **kw)
+        psfs[corner] = make_one_psf(
+            sca,
+            filter_name,
+            wcs=wcs,
+            stpsf=stpsf,
+            pix=pix,
+            chromatic=chromatic,
+            extra_convolution=extra_convolution,
+            **kw,
+        )
     return VariablePSF(corners, psfs)
 
 
@@ -189,15 +237,17 @@ class VariablePSF:
         -------
         GalSim profile representing PSF at (x, y).
         """
-        npix = self.corners['ur'][-1]
-        off = self.corners['ll'][0]
+        npix = self.corners["ur"][-1]
+        off = self.corners["ll"][0]
         wleft = np.clip((npix - x) / (npix - off), 0, 1)
         wlow = np.clip((npix - y) / (npix - off), 0, 1)
         # x = [0, off] -> 1
         # x = [npix, infinity] -> 0
         # linearly between those, likewise for y.
-        out = (self.psf['ll'] * wleft * wlow
-               + self.psf['lr'] * (1 - wleft) * wlow
-               + self.psf['ul'] * wleft * (1 - wlow)
-               + self.psf['ur'] * (1 - wleft) * (1 - wlow))
+        out = (
+            self.psf["ll"] * wleft * wlow
+            + self.psf["lr"] * (1 - wleft) * wlow
+            + self.psf["ul"] * wleft * (1 - wlow)
+            + self.psf["ur"] * (1 - wleft) * (1 - wlow)
+        )
         return out

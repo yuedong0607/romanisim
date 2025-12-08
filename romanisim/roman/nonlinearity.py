@@ -5,11 +5,8 @@ import roman_datamodels
 
 from astropy import units as u
 
-from .parameters import (
-    default_parameters_dictionary,
-    nborder
-)
 from .gain import gain
+from .parameters import default_parameters_dictionary, nborder
 
 __all__ = ["NLfunc", "Nonlinearity"]
 

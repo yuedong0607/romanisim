@@ -28,6 +28,7 @@ import gwcs.geometry
 import gwcs.wcs
 import numpy as np
 import roman_datamodels
+
 from astropy import units as u
 from astropy.modeling import models
 from gwcs import coordinate_frames as cf
@@ -124,7 +125,8 @@ def get_wcs(image, usecrds=True, distortion=None):
     date = astropy.time.Time(image_mod.meta.exposure.start_time)
 
     world_pos = astropy.coordinates.SkyCoord(
-        image_mod.meta.wcsinfo.ra_ref * u.deg, image_mod.meta.wcsinfo.dec_ref * u.deg
+        image_mod.meta.wcsinfo.ra_ref * u.deg,
+        image_mod.meta.wcsinfo.dec_ref * u.deg,
     )
 
     if (distortion is None) and usecrds:
@@ -235,7 +237,9 @@ def make_wcs(
     )
     tel2sky.name = "v23tosky"
 
-    detector = cf.Frame2D(name="detector", axes_order=(0, 1), unit=(u.pix, u.pix))
+    detector = cf.Frame2D(
+        name="detector", axes_order=(0, 1), unit=(u.pix, u.pix)
+    )
     v2v3 = cf.Frame2D(
         name="v2v3",
         axes_order=(0, 1),
@@ -248,10 +252,14 @@ def make_wcs(
         axes_names=("v2", "v3"),
         unit=(u.arcsec, u.arcsec),
     )
-    world = cf.CelestialFrame(reference_frame=astropy.coordinates.ICRS(), name="world")
+    world = cf.CelestialFrame(
+        reference_frame=astropy.coordinates.ICRS(), name="world"
+    )
 
     # Compute differential velocity aberration (DVA) correction:
-    va_corr = dva_corr_model(va_scale=scale_factor, v2_ref=v2_ref, v3_ref=v3_ref)
+    va_corr = dva_corr_model(
+        va_scale=scale_factor, v2_ref=v2_ref, v3_ref=v3_ref
+    )
 
     pipeline = [
         gwcs.wcs.Step(detector, distortion),
@@ -304,7 +312,9 @@ class GWCS(galsim.wcs.CelestialWCS):
                     f"np.ndim(x) != np.ndim(y) => {np.ndim(x)} != {np.ndim(y)}"
                 )
             elif x.shape != y.shape:
-                raise ValueError(f"x.shape != y.shape => {x.shape} != {y.shape}")
+                raise ValueError(
+                    f"x.shape != y.shape => {x.shape} != {y.shape}"
+                )
             return r, d
 
     def _xy(self, ra, dec, color=None):
@@ -325,7 +335,9 @@ class GWCS(galsim.wcs.CelestialWCS):
                     f"np.ndim(ra) != np.ndim(dec) => {np.ndim(ra)} != {np.ndim(dec)}"
                 )
             elif x.shape != y.shape:
-                raise ValueError(f"ra.shape != dec.shape => {ra.shape} != {dec.shape}")
+                raise ValueError(
+                    f"ra.shape != dec.shape => {ra.shape} != {dec.shape}"
+                )
             return x, y
 
     def _newOrigin(self, origin):
@@ -514,14 +526,18 @@ def create_tangent_plane_gwcs(center, scale, center_coord):
     pixelscale = models.Scale(scale / 3600.0) & models.Scale(scale / 3600.0)
     tangent_projection = models.Pix2Sky_TAN()
     celestial_rotation = models.RotateNative2Celestial(
-        center_coord.ra.to(u.deg).value, center_coord.dec.to(u.deg).value, 180.0
+        center_coord.ra.to(u.deg).value,
+        center_coord.dec.to(u.deg).value,
+        180.0,
     )
     det2sky = pixelshift | pixelscale | tangent_projection | celestial_rotation
     detector_frame = cf.Frame2D(
         name="detector", axes_names=("x", "y"), unit=(u.pix, u.pix)
     )
     sky_frame = cf.CelestialFrame(
-        reference_frame=astropy.coordinates.ICRS(), name="icrs", unit=(u.deg, u.deg)
+        reference_frame=astropy.coordinates.ICRS(),
+        name="icrs",
+        unit=(u.deg, u.deg),
     )
     wcsobj = gwcs.wcs.WCS([(detector_frame, det2sky), (sky_frame, None)])
     return wcsobj
@@ -590,7 +606,9 @@ def dva_corr_model(va_scale, v2_ref, v3_ref):
         return models.Identity(2)
 
     if va_scale <= 0:
-        log.warning("Velocity aberration scale must be a positive number: %s", va_scale)
+        log.warning(
+            "Velocity aberration scale must be a positive number: %s", va_scale
+        )
         log.warning("Defaulting to scale of 1.0")
         va_scale = 1.0
 

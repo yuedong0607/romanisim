@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+
 from astropy.io import ascii
 from astropy.time import Time
 
@@ -57,8 +58,16 @@ shortwave_bands = [
 # the galsim bandpass names to the Roman bandpass names and vice versa.
 # it would be nice to be agnostic about which one we use.
 galsim_bandpasses = [
-    'R062', 'Z087', 'Y106', 'J129', 'H158', 'F184', 'K213', 'W146']
-galsim2roman_bandpass = {x: 'F' + x[1:] for x in galsim_bandpasses}
+    "R062",
+    "Z087",
+    "Y106",
+    "J129",
+    "H158",
+    "F184",
+    "K213",
+    "W146",
+]
+galsim2roman_bandpass = {x: "F" + x[1:] for x in galsim_bandpasses}
 roman2galsim_bandpass = {v: k for k, v in galsim2roman_bandpass.items()}
 
 # provide some no-ops if we are given a key in the right bandpass
@@ -85,12 +94,16 @@ persistence_coefficients = (
 # parameters in the fermi model = [ A, x0, dx, a, r, half_well]
 # The following parameters are for H4RG-lo, the conservative model for low influence level x.
 # The info and implementation can be found in roman_detectors.applyPersistence() and roman_detectors.fermi_linear().
-persistence_fermi_parameters = np.array([0.017, 60000.0, 50000.0, 0.045, 1.0, 50000.0])
+persistence_fermi_parameters = np.array(
+    [0.017, 60000.0, 50000.0, 0.045, 1.0, 50000.0]
+)
 
 ######################################################################################################
 # [TODO] Temporary implementation for accessing roman-technical-information repo
 ######################################################################################################
-roman_tech_repo_path = "/hpc/home/yf194/Work/projects/roman-technical-information/"
+roman_tech_repo_path = (
+    "/hpc/home/yf194/Work/projects/roman-technical-information/"
+)
 # FPSPerformance_path = os.path.join(
 #     roman_tech_repo_path, "data", "WideFieldInstrument", "FPSPerformance"
 # )

@@ -11,6 +11,7 @@ __all__ = ["ReadNoise"]
 # Default read noise value
 read_noise = 8.5  # e-
 
+
 class ReadNoise(object):
     def __init__(self, usecrds=False, metadata=None, rng=None, seed=None):
         self.read_noise = read_noise

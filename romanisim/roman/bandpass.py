@@ -2,8 +2,9 @@ import importlib.resources
 import os
 
 import numpy as np
-from astropy.io import ascii
+
 from astropy import units as u
+from astropy.io import ascii
 from galsim import Bandpass, LookupTable
 from galsim.errors import galsim_warn
 
@@ -133,8 +134,12 @@ def get_zodi_bkgnd(ecl_lat, ecl_dlon, lambda_min, lambda_max, Tlambda, T):
     ilon = 0
     while dlonTable[ilon + 1] < ecl_dlon and ilon < nlon - 2:
         ilon += 1
-    frlat = (ecl_lat - betaTable[ilat]) / (betaTable[ilat + 1] - betaTable[ilat])
-    frlon = (ecl_dlon - dlonTable[ilon]) / (dlonTable[ilon + 1] - dlonTable[ilon])
+    frlat = (ecl_lat - betaTable[ilat]) / (
+        betaTable[ilat + 1] - betaTable[ilat]
+    )
+    frlon = (ecl_dlon - dlonTable[ilon]) / (
+        dlonTable[ilon + 1] - dlonTable[ilon]
+    )
     sky05 = np.exp(
         np.log(skyTable[ilat + (ilon) * nlat]) * (1.0 - frlat) * (1.0 - frlon)
         + np.log(skyTable[ilat + (ilon + 1) * nlat]) * (1.0 - frlat) * (frlon)
@@ -145,7 +150,9 @@ def get_zodi_bkgnd(ecl_lat, ecl_dlon, lambda_min, lambda_max, Tlambda, T):
     zodi_tot = 0.0
     dlambda = (lambda_max - lambda_min) / float(Nlambda)
     for ilambda in range(Nlambda):
-        lambda_ = lambda_min + (ilambda + 0.5) / Nlambda * (lambda_max - lambda_min)
+        lambda_ = lambda_min + (ilambda + 0.5) / Nlambda * (
+            lambda_max - lambda_min
+        )
         # /* Solar spectrum at this wavelength: F_lambda/F_{0.5um} */
         index_lambda = 100 * np.log(lambda_) / np.log(10.0) + 80
         ilam = int(np.floor(index_lambda))

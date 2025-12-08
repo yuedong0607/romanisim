@@ -1,13 +1,19 @@
 import os
+
 import asdf
 import crds
 import galsim
 import roman_datamodels
+
 from astropy import units as u
 from astropy.io import ascii
 
-from .parameters import default_parameters_dictionary, nborder, roman_tech_repo_path
 from .gain import gain
+from .parameters import (
+    default_parameters_dictionary,
+    nborder,
+    roman_tech_repo_path,
+)
 
 __all__ = ["DarkCurrent"]
 
@@ -18,7 +24,11 @@ dark_current = 0.015  # e-/pix/s
 # Columns in the summary file: ['SCU', 'SCA', 'Dark Current - Median', 'Dark Current - Mean', 'Percentage Passing Requirement']
 # The 18th (counting from 0) row: All detectors (MAP)
 dark_current_summary = os.path.join(
-    roman_tech_repo_path, "data", "WideFieldInstrument", "FPSPerformance", "WFI_Dark_current_summary.ecsv"
+    roman_tech_repo_path,
+    "data",
+    "WideFieldInstrument",
+    "FPSPerformance",
+    "WFI_Dark_current_summary.ecsv",
 )
 try:
     data = ascii.read(dark_current_summary)
@@ -66,7 +76,9 @@ class DarkCurrent(object):
                 nborder:-nborder, nborder:-nborder
             ].copy()
         with asdf.open(ref_file["gain"]) as f:
-            self.gain = f["roman"]["data"][nborder:-nborder, nborder:-nborder].copy()
+            self.gain = f["roman"]["data"][
+                nborder:-nborder, nborder:-nborder
+            ].copy()
         self.dark_rate * u.DN / u.s
         self.dark_rate *= self.gain
         if isinstance(self.dark_rate, u.Quantity):

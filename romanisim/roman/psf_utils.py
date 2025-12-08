@@ -1,37 +1,64 @@
-import numpy as np
-import os
 import importlib.resources
+import os
 
-from .parameters import pixel_scale, n_pix, pixel_scale_mm, n_sca
-from .parameters import diameter, obscuration, longwave_bands, shortwave_bands
-from .bandpass import getBandpasses
+import numpy as np
 
-from galsim import PositionD, GalSimValueError, GalSimRangeError
-from galsim import Bandpass, PixelScale, GSParams, Aperture
-from galsim import OpticalPSF, ChromaticOpticalPSF
-from galsim import meta_data, fits
+from galsim import (
+    Aperture,
+    Bandpass,
+    ChromaticOpticalPSF,
+    GalSimRangeError,
+    GalSimValueError,
+    GSParams,
+    OpticalPSF,
+    PixelScale,
+    PositionD,
+    fits,
+)
 from galsim.utilities import LRU_Cache
 
+from .bandpass import getBandpasses
+from .parameters import (
+    diameter,
+    longwave_bands,
+    n_pix,
+    n_sca,
+    obscuration,
+    pixel_scale,
+    pixel_scale_mm,
+    shortwave_bands,
+)
+
 # Define a default set of bandpasses for which this routine works.
-default_bandpass_list = ['J129', 'F184', 'W149', 'Y106', 'Z087', 'H158']
+default_bandpass_list = ["J129", "F184", "W149", "Y106", "Z087", "H158"]
 # Prefix for files containing information about Zernikes for each SCA for cycle 7.
 zemax_filepref = "Roman_Cycle-9_WFI_zim_zernikes_082623"
-zemax_filesuff = '.txt'
-zemax_wavelength = 1293. #nm
+zemax_filesuff = ".txt"
+zemax_wavelength = 1293.0  # nm
 
 # These need 'SCA*' prepended to the start to get the file name, and they live in
 # the share/roman directory.
-pupil_plane_file_longwave = 'RST_WIM_Filter_F184_SCA_'
-pupil_plane_file_shortwave = 'RST_WIM_Filter_skinny_SCA_'
-pupil_plane_filesuff = '.fits.gz'
+pupil_plane_file_longwave = "RST_WIM_Filter_F184_SCA_"
+pupil_plane_file_shortwave = "RST_WIM_Filter_skinny_SCA_"
+pupil_plane_filesuff = ".fits.gz"
 
 data_root = str(importlib.resources.files("romanisim").joinpath("data/"))
 
-def getPSF(SCA, bandpass,
-           SCA_pos=None, pupil_bin=4, wcs=None,
-           n_waves=None, extra_aberrations=None,
-           wavelength=None, gsparams=None,
-           logger=None, high_accuracy=None, approximate_struts=None):
+
+def getPSF(
+    SCA,
+    bandpass,
+    SCA_pos=None,
+    pupil_bin=4,
+    wcs=None,
+    n_waves=None,
+    extra_aberrations=None,
+    wavelength=None,
+    gsparams=None,
+    logger=None,
+    high_accuracy=None,
+    approximate_struts=None,
+):
     """Get a single PSF for Roman ST observations.
 
     The user must provide the SCA and bandpass; the latter is used when setting up the pupil
@@ -167,41 +194,65 @@ def getPSF(SCA, bandpass,
     """
 
     # Deprecated options
-    if bandpass == 'W149':
+    if bandpass == "W149":
         from galsim.deprecated import depr
-        depr('W149', 2.5, 'W146', 'Note: this is to match current Roman filter naming schemes')
-        bandpass = 'W146'
+
+        depr(
+            "W149",
+            2.5,
+            "W146",
+            "Note: this is to match current Roman filter naming schemes",
+        )
+        bandpass = "W146"
     if high_accuracy:
         if approximate_struts:
             from galsim.deprecated import depr
-            depr('high_accuracy=True,approximate_struts=True', 2.3,
-                 'pupil_bin=4, gsparams=galsim.GSParams(folding_threshold=2.e-3)',
-                 'Note: this is not actually equivalent to the old behavior, but it should '
-                 'be both faster and more accurate than the corresponding PSF in v2.2.')
+
+            depr(
+                "high_accuracy=True,approximate_struts=True",
+                2.3,
+                "pupil_bin=4, gsparams=galsim.GSParams(folding_threshold=2.e-3)",
+                "Note: this is not actually equivalent to the old behavior, but it should "
+                "be both faster and more accurate than the corresponding PSF in v2.2.",
+            )
             # Set folding_threshold 2.5x smaller than default.
-            gsparams = GSParams.check(gsparams, folding_threshold=2.e-3)
+            gsparams = GSParams.check(gsparams, folding_threshold=2.0e-3)
             pupil_bin = 4
         else:
             from galsim.deprecated import depr
-            depr('high_accuracy=True', 2.3,
-                 'pupil_bin=1, gsparams=galsim.GSParams(folding_threshold=2.e-3)',
-                 'Note: this is not actually equivalent to the old behavior, but it should '
-                 'be both faster and more accurate than the corresponding PSF in v2.2.')
+
+            depr(
+                "high_accuracy=True",
+                2.3,
+                "pupil_bin=1, gsparams=galsim.GSParams(folding_threshold=2.e-3)",
+                "Note: this is not actually equivalent to the old behavior, but it should "
+                "be both faster and more accurate than the corresponding PSF in v2.2.",
+            )
             # Set folding_threshold 2.5x smaller than default.
-            gsparams = GSParams.check(gsparams, folding_threshold=2.e-3)
+            gsparams = GSParams.check(gsparams, folding_threshold=2.0e-3)
             pupil_bin = 1
     elif approximate_struts:
         from galsim.deprecated import depr
-        depr('approximate_struts=True', 2.3, 'pupil_bin=8',
-             'Note: this is not actually equivalent to the old behavior, but it should '
-             'be both faster and more accurate than the corresponding PSF in v2.2.')
+
+        depr(
+            "approximate_struts=True",
+            2.3,
+            "pupil_bin=8",
+            "Note: this is not actually equivalent to the old behavior, but it should "
+            "be both faster and more accurate than the corresponding PSF in v2.2.",
+        )
         pupil_bin = 8
     elif approximate_struts is False or high_accuracy is False:
         # If they are explicitly given, rather than default (None), then trigger this.
         from galsim.deprecated import depr
-        depr('approximate_struts=False, high_accuracy=False', 2.3, 'pupil_bin=4',
-             'Note: this is not actually equivalent to the old behavior, but it should '
-             'be both faster and more accurate than the corresponding PSF in v2.2.')
+
+        depr(
+            "approximate_struts=False, high_accuracy=False",
+            2.3,
+            "pupil_bin=4",
+            "Note: this is not actually equivalent to the old behavior, but it should "
+            "be both faster and more accurate than the corresponding PSF in v2.2.",
+        )
         pupil_bin = 4
 
     if SCA <= 0 or SCA > n_sca:
@@ -209,32 +260,47 @@ def getPSF(SCA, bandpass,
 
     # SCA_pos: if None, then all should just be center of the SCA.
     if SCA_pos is None:
-        SCA_pos = PositionD(n_pix/2, n_pix/2)
+        SCA_pos = PositionD(n_pix / 2, n_pix / 2)
 
     # Parse the bandpasses to see which pupil plane image is needed
     pupil_plane_type = None
-    if bandpass in longwave_bands or bandpass=='long':
-        pupil_plane_type = 'long'
-    elif bandpass in shortwave_bands or bandpass=='short':
-        pupil_plane_type = 'short'
+    if bandpass in longwave_bands or bandpass == "long":
+        pupil_plane_type = "long"
+    elif bandpass in shortwave_bands or bandpass == "short":
+        pupil_plane_type = "short"
     elif bandpass is None and n_waves is None:
-        pupil_plane_type = 'short'
+        pupil_plane_type = "short"
     else:
-        raise GalSimValueError("Bandpass not a valid Roman bandpass or 'short'/'long'.",
-                               bandpass, default_bandpass_list)
+        raise GalSimValueError(
+            "Bandpass not a valid Roman bandpass or 'short'/'long'.",
+            bandpass,
+            default_bandpass_list,
+        )
 
     # If bandpass is 'short'/'long', then make sure that interpolation is not called for, since that
     # requires an actual bandpass.
-    if bandpass in ['short','long'] and n_waves is not None:
-        raise GalSimValueError("Cannot use bandpass='short'/'long' with interpolation.", bandpass)
+    if bandpass in ["short", "long"] and n_waves is not None:
+        raise GalSimValueError(
+            "Cannot use bandpass='short'/'long' with interpolation.", bandpass
+        )
 
     if not isinstance(wavelength, (Bandpass, float, type(None))):
-        raise TypeError("wavelength should either be a Bandpass, float, or None.")
+        raise TypeError(
+            "wavelength should either be a Bandpass, float, or None."
+        )
 
     # Now call _get_single_PSF().
-    psf = _get_single_PSF(SCA, bandpass, SCA_pos, pupil_bin,
-                          n_waves, extra_aberrations, wavelength,
-                          pupil_plane_type, gsparams)
+    psf = _get_single_PSF(
+        SCA,
+        bandpass,
+        SCA_pos,
+        pupil_bin,
+        n_waves,
+        extra_aberrations,
+        wavelength,
+        pupil_plane_type,
+        gsparams,
+    )
 
     # Apply WCS.
     # The current version is in arcsec units, but oriented parallel to the image coordinates.
@@ -246,45 +312,62 @@ def getPSF(SCA, bandpass,
 
     return psf
 
+
 def __make_aperture(SCA, pupil_plane_type, pupil_bin, wave, gsparams):
     # Load the pupil plane image.
-    if pupil_plane_type == 'long':
+    if pupil_plane_type == "long":
         # pupil_plane_im = os.path.join(meta_data.share_dir, 'roman',
         #     pupil_plane_file_longwave + '%d'%SCA + pupil_plane_filesuff)
         pupil_plane_im = os.path.join(
-            data_root, pupil_plane_file_longwave + '%d'%SCA + pupil_plane_filesuff
+            data_root,
+            pupil_plane_file_longwave + "%d" % SCA + pupil_plane_filesuff,
         )
     else:
         # pupil_plane_im = os.path.join(meta_data.share_dir, 'roman',
         #     pupil_plane_file_shortwave + '%d'%SCA + pupil_plane_filesuff)
         pupil_plane_im = os.path.join(
-            data_root, pupil_plane_file_shortwave + '%d'%SCA + pupil_plane_filesuff
+            data_root,
+            pupil_plane_file_shortwave + "%d" % SCA + pupil_plane_filesuff,
         )
-    
-    
+
     pupil_plane_im = fits.read(pupil_plane_im, read_header=True)
     # Native pixel scale in the file is for the exit pupil.  We want the scale of the
     # entrance pupil.  Fortunately, they provide the conversion as 'HIERARCH PUPIL SCALE FACTOR' in the header.
     # They also use microns for units, and we want meters, hence the extra 1.e-6.
-    pupil_plane_im.scale *= pupil_plane_im.header['HIERARCH PUPIL SCALE FACTOR'] * 1.e-6
+    pupil_plane_im.scale *= (
+        pupil_plane_im.header["HIERARCH PUPIL SCALE FACTOR"] * 1.0e-6
+    )
 
-    pupil_plane_im = pupil_plane_im.bin(pupil_bin,pupil_bin)
+    pupil_plane_im = pupil_plane_im.bin(pupil_bin, pupil_bin)
 
-    aper = Aperture(lam=wave, diam=diameter,
-                    obscuration=obscuration,
-                    pupil_plane_im=pupil_plane_im,
-                    gsparams=gsparams)
+    aper = Aperture(
+        lam=wave,
+        diam=diameter,
+        obscuration=obscuration,
+        pupil_plane_im=pupil_plane_im,
+        gsparams=gsparams,
+    )
     return aper
+
 
 # Usually a given run will only need one or a few different apertures for repeated getPSF calls.
 # So cache those apertures here to avoid having to remake them.
 _make_aperture = LRU_Cache(__make_aperture)
 
-def _get_single_PSF(SCA, bandpass, SCA_pos, pupil_bin,
-                    n_waves, extra_aberrations, wavelength,
-                    pupil_plane_type, gsparams):
+
+def _get_single_PSF(
+    SCA,
+    bandpass,
+    SCA_pos,
+    pupil_bin,
+    n_waves,
+    extra_aberrations,
+    wavelength,
+    pupil_plane_type,
+    gsparams,
+):
     """Routine for making a single PSF.  This gets called by `getPSF` after it parses all the
-       options that were passed in.  Users will not directly interact with this routine.
+    options that were passed in.  Users will not directly interact with this routine.
     """
     if wavelength is None:
         wave = zemax_wavelength
@@ -299,33 +382,46 @@ def _get_single_PSF(SCA, bandpass, SCA_pos, pupil_bin,
     # Start reading in the aberrations for that SCA
     aberrations, x_pos, y_pos = _read_aberrations(SCA)
     # Do bilinear interpolation, unless we're exactly at the center (default).
-    use_aberrations = _interp_aberrations_bilinear(aberrations, x_pos, y_pos, SCA_pos)
+    use_aberrations = _interp_aberrations_bilinear(
+        aberrations, x_pos, y_pos, SCA_pos
+    )
 
     if extra_aberrations is not None:
-        use_aberrations[:len(extra_aberrations)] += extra_aberrations
+        use_aberrations[: len(extra_aberrations)] += extra_aberrations
     # We don't want to use piston, tip, or tilt aberrations.  The former doesn't affect the
     # appearance of the PSF, and the latter cause centroid shifts.  So, we set the first 4
     # numbers (corresponding to a place-holder, piston, tip, and tilt) to zero.
-    use_aberrations[0:4] = 0.
+    use_aberrations[0:4] = 0.0
 
     # Now set up the PSF, including the option to interpolate over waves
     if wavelength is None:
-        PSF = ChromaticOpticalPSF(lam=zemax_wavelength,
-                                  diam=diameter, aberrations=use_aberrations,
-                                  aper=aper, gsparams=gsparams)
+        PSF = ChromaticOpticalPSF(
+            lam=zemax_wavelength,
+            diam=diameter,
+            aberrations=use_aberrations,
+            aper=aper,
+            gsparams=gsparams,
+        )
         if n_waves is not None:
             # To decide the range of wavelengths to use, check the bandpass.
             bp_dict = getBandpasses()
             bp = bp_dict[bandpass]
-            PSF = PSF.interpolate(waves=np.linspace(bp.blue_limit, bp.red_limit, n_waves),
-                                  oversample_fac=1.5)
+            PSF = PSF.interpolate(
+                waves=np.linspace(bp.blue_limit, bp.red_limit, n_waves),
+                oversample_fac=1.5,
+            )
     else:
         tmp_aberrations = use_aberrations * zemax_wavelength / wavelength
-        PSF = OpticalPSF(lam=wavelength, diam=diameter,
-                         aberrations=tmp_aberrations,
-                         aper=aper, gsparams=gsparams)
+        PSF = OpticalPSF(
+            lam=wavelength,
+            diam=diameter,
+            aberrations=tmp_aberrations,
+            aper=aper,
+            gsparams=gsparams,
+        )
 
     return PSF
+
 
 def _read_aberrations(SCA):
     """
@@ -340,12 +436,10 @@ def _read_aberrations(SCA):
         NumPy arrays containing the aberrations, and x and y field positions.
     """
     # Construct filename.
-    sca_str = '_%02d'%SCA
+    sca_str = "_%02d" % SCA
     # infile = os.path.join(meta_data.share_dir, 'roman',
     #                       zemax_filepref + sca_str + zemax_filesuff)
-    infile = os.path.join(
-            data_root, zemax_filepref + sca_str + zemax_filesuff
-        )
+    infile = os.path.join(data_root, zemax_filepref + sca_str + zemax_filesuff)
 
     # Read in data.
     dat = np.loadtxt(infile)
@@ -353,22 +447,23 @@ def _read_aberrations(SCA):
     # within an SCA eventually.  Put it in the required format: an array of length (5 field
     # positions, 23 Zernikes), with the first entry empty (Zernike polynomials are 1-indexed so we
     # use entries 1-22).  The units are waves.
-    aberrations = np.zeros((5,23))
-    aberrations[:,1:] = dat[:,5:]
+    aberrations = np.zeros((5, 23))
+    aberrations[:, 1:] = dat[:, 5:]
     # Also get the field position.  The file gives it in mm with respect to the center, but we
     # want it in pixels with respect to the corner. The pixel size of the detector is 0.01 mm/pixel
 
-    x = dat[:,1]/pixel_scale_mm
-    y = dat[:,2]/pixel_scale_mm
+    x = dat[:, 1] / pixel_scale_mm
+    y = dat[:, 2] / pixel_scale_mm
     if SCA % 3 != 0:
         # For these, the SCA is rotated 180 degrees relative to the nominal X, Y coordinates.
         x = -x
         y = -y
 
-    x += n_pix/2
-    y += n_pix/2
+    x += n_pix / 2
+    y += n_pix / 2
 
     return aberrations, x, y
+
 
 def _interp_aberrations_bilinear(aberrations, x_pos, y_pos, SCA_pos):
     """
@@ -382,15 +477,15 @@ def _interp_aberrations_bilinear(aberrations, x_pos, y_pos, SCA_pos):
     # take the outer one and do a simple bilinear interpolation as though it were a rectangle.
 
     # First, figure out which point is which corner. (0 is always the center.)
-    for i in range(1,5):
+    for i in range(1, 5):
         if x_pos[i] < x_pos[0] and y_pos[i] < y_pos[0]:
-            ll = i # lower-left
+            ll = i  # lower-left
         if x_pos[i] < x_pos[0] and y_pos[i] > y_pos[0]:
-            ul = i # upper-left
+            ul = i  # upper-left
         if x_pos[i] > x_pos[0] and y_pos[i] < y_pos[0]:
-            lr = i # lower-right
+            lr = i  # lower-right
         if x_pos[i] > x_pos[0] and y_pos[i] > y_pos[0]:
-            ur = i # upper-right
+            ur = i  # upper-right
     assert x_pos[ll] < x_pos[0] and y_pos[ll] < y_pos[0]
     assert x_pos[ul] < x_pos[0] and y_pos[ul] > y_pos[0]
     assert x_pos[lr] > x_pos[0] and y_pos[lr] < y_pos[0]
@@ -405,7 +500,11 @@ def _interp_aberrations_bilinear(aberrations, x_pos, y_pos, SCA_pos):
     ul_ab = aberrations[ul, :]
     lr_ab = aberrations[lr, :]
     ur_ab = aberrations[ur, :]
-    interp_ab = (1.0-x_frac)*(1.0-y_frac)*ll_ab + (1.0-x_frac)*y_frac*ul_ab + \
-        x_frac*(1.0-y_frac)*lr_ab + x_frac*y_frac*ur_ab
+    interp_ab = (
+        (1.0 - x_frac) * (1.0 - y_frac) * ll_ab
+        + (1.0 - x_frac) * y_frac * ul_ab
+        + x_frac * (1.0 - y_frac) * lr_ab
+        + x_frac * y_frac * ur_ab
+    )
 
     return interp_ab.flatten()

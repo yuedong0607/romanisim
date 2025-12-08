@@ -2,8 +2,8 @@ import asdf
 import crds
 import numpy as np
 import roman_datamodels
-from galsim import Image
 
+from galsim import Image
 from scipy import ndimage
 
 from .parameters import default_parameters_dictionary
@@ -21,6 +21,7 @@ ipc_kernel = np.array(
 )
 ipc_kernel /= np.sum(ipc_kernel)
 ipc_kernel = Image(ipc_kernel)
+
 
 class IPC(object):
     def __init__(self, usecrds=False, metadata=None):
