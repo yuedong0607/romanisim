@@ -2,13 +2,19 @@ import importlib.resources
 import os
 
 import numpy as np
-
+from astropy import constants
 from astropy import units as u
 from astropy.io import ascii
 from galsim import Bandpass, LookupTable
 from galsim.errors import galsim_warn
+from scipy import integrate
 
-from .parameters import roman2galsim_bandpass, roman_tech_repo_path
+from .parameters import (
+    collecting_area,
+    non_imaging_bands,
+    roman2galsim_bandpass,
+    roman_tech_repo_path,
+)
 
 effarea_root = os.path.join(
     roman_tech_repo_path, "data/WideFieldInstrument/Imaging/EffectiveAreas/"
@@ -134,12 +140,8 @@ def get_zodi_bkgnd(ecl_lat, ecl_dlon, lambda_min, lambda_max, Tlambda, T):
     ilon = 0
     while dlonTable[ilon + 1] < ecl_dlon and ilon < nlon - 2:
         ilon += 1
-    frlat = (ecl_lat - betaTable[ilat]) / (
-        betaTable[ilat + 1] - betaTable[ilat]
-    )
-    frlon = (ecl_dlon - dlonTable[ilon]) / (
-        dlonTable[ilon + 1] - dlonTable[ilon]
-    )
+    frlat = (ecl_lat - betaTable[ilat]) / (betaTable[ilat + 1] - betaTable[ilat])
+    frlon = (ecl_dlon - dlonTable[ilon]) / (dlonTable[ilon + 1] - dlonTable[ilon])
     sky05 = np.exp(
         np.log(skyTable[ilat + (ilon) * nlat]) * (1.0 - frlat) * (1.0 - frlon)
         + np.log(skyTable[ilat + (ilon + 1) * nlat]) * (1.0 - frlat) * (frlon)
@@ -150,9 +152,7 @@ def get_zodi_bkgnd(ecl_lat, ecl_dlon, lambda_min, lambda_max, Tlambda, T):
     zodi_tot = 0.0
     dlambda = (lambda_max - lambda_min) / float(Nlambda)
     for ilambda in range(Nlambda):
-        lambda_ = lambda_min + (ilambda + 0.5) / Nlambda * (
-            lambda_max - lambda_min
-        )
+        lambda_ = lambda_min + (ilambda + 0.5) / Nlambda * (lambda_max - lambda_min)
         # /* Solar spectrum at this wavelength: F_lambda/F_{0.5um} */
         index_lambda = 100 * np.log(lambda_) / np.log(10.0) + 80
         ilam = int(np.floor(index_lambda))
@@ -202,7 +202,7 @@ def getBandpasses(
     AB_zeropoint=True,
     default_thin_trunc=True,
     include_all_bands=False,
-    SCA_ID=None,
+    sca=None,
     **kwargs,
 ):
     """Utility to get a dictionary containing the Roman ST bandpasses used for imaging.
@@ -271,32 +271,33 @@ def getBandpasses(
                             There is currently no estimate for the thermal background for these
                             bands and they are set to zero arbitrarily.
                             [default: False]
-        SCA_ID:             Return the bandpasses dictionary for the particular SCA if given.
+        sca:             Return the bandpasses dictionary for the particular SCA if given.
                             [default: None]
         **kwargs:           Other kwargs are passed to either `Bandpass.thin` or
                             `Bandpass.truncate` as appropriate.
 
     @returns A dictionary containing bandpasses for all Roman imaging filters.
     """
-    from .parameters import collecting_area, non_imaging_bands
 
-    if SCA_ID is None:
-        # Begin by reading in the file containing the info.
-        datafile = os.path.join(data_root, "Roman_effarea_20210614.txt")
-        # One line with the column headings, and the rest as a NumPy array.
-        data = np.genfromtxt(datafile, names=True)
-    else:
-        sca_id = "SCA%02d" % (int(SCA_ID))
+    # if sca is None:
+    #     # Begin by reading in the file containing the info.
+    #     datafile = os.path.join(data_root, "Roman_effarea_20210614.txt")
+    #     # One line with the column headings, and the rest as a NumPy array.
+    #     data = np.genfromtxt(datafile, names=True)
+    # else:
+    #     sca_id = "SCA%02d" % (int(sca))
 
-        # zfile = zipfile.ZipFile(effarea_zip_file, 'r')
-        # datafile = zfile.open("Roman_effarea_v8_%s_20240301.ecsv" % (sca_id))
-        datafile = os.path.join(
-            effarea_root, "Roman_effarea_v8_%s_20240301.ecsv" % (sca_id)
-        )
-        data = ascii.read(datafile)
-        for index, bp_name in enumerate(data.dtype.names[1:]):
-            if bp_name in roman2galsim_bandpass:
-                data.rename_column(bp_name, roman2galsim_bandpass[bp_name])
+    #     # zfile = zipfile.ZipFile(effarea_zip_file, 'r')
+    #     # datafile = zfile.open("Roman_effarea_v8_%s_20240301.ecsv" % (sca_id))
+    #     datafile = os.path.join(
+    #         effarea_root, "Roman_effarea_v8_%s_20240301.ecsv" % (sca_id)
+    #     )
+    #     data = ascii.read(datafile)
+    #     for index, bp_name in enumerate(data.dtype.names[1:]):
+    #         if bp_name in roman2galsim_bandpass:
+    #             data.rename_column(bp_name, roman2galsim_bandpass[bp_name])
+
+    data = read_gsfc_effarea(sca=sca)
 
     wave = 1000.0 * data["Wave"]
     # Read in and manipulate the sky background info.
@@ -356,7 +357,7 @@ def getBandpasses(
         bp._ecliptic_lat = ecliptic_lat
         bp._ecliptic_lon = ecliptic_lon
 
-        if SCA_ID is None:
+        if sca is None:
             bp._sky_level = sky_data[2 + index, :]
         else:
             bp._sky_level = np.zeros_like(sky_data[2 + index, :])
@@ -375,3 +376,167 @@ def getBandpasses(
         bandpass_dict[bp.name] = bp
 
     return bandpass_dict
+
+
+def read_gsfc_effarea(sca=None, filename=None):
+    """Read an effective area file from Roman.
+
+    This just puts together the right invocation to get an Excel-converted
+    ECSV file into memory.
+
+    Parameters
+    ----------
+    sca : int
+        the name of the detector. A number between 1-18.
+    filename : str
+        filename to read in
+
+    Returns
+    -------
+    astropy.table.Table
+        table with effective areas for different Roman bandpasses.
+    """
+    if filename is None:
+        if sca is None:
+            # Begin by reading in the file containing the info.
+            filename = os.path.join(data_root, "Roman_effarea_20210614.txt")
+            # One line with the column headings, and the rest as a NumPy array.
+            # data = np.genfromtxt(datafile, names=True)
+            data = ascii.read(filename)
+        else:
+            sca_id = "SCA%02d" % (int(sca))
+            filename = os.path.join(
+                effarea_root, "Roman_effarea_v8_%s_20240301.ecsv" % (sca_id)
+            )
+
+    data = ascii.read(filename)
+    for index, bp_name in enumerate(data.dtype.names[1:]):
+        if bp_name in roman2galsim_bandpass:
+            data.rename_column(bp_name, roman2galsim_bandpass[bp_name])
+    return data
+
+
+def compute_abflux(sca, effarea=None):
+    """Compute the AB zero point fluxes for each filter.
+
+    How many electrons would a zeroth magnitude AB star deposit in
+    Roman's detectors in a second?
+
+    Parameters
+    ----------
+    sca : int
+        the name of the detector. A number between 1-18.
+    effarea : astropy.Table.table
+        Table from GSFC with effective areas for each filter.
+
+    Returns
+    -------
+    dict[str] : float
+        lookup table of zero point fluxes for each filter (electrons / s)
+    """
+
+    if effarea is None:
+        effarea = read_gsfc_effarea(sca)
+
+    # get the filter names.  This is a bit ugly since there's also
+    # a wavelength column 'Wave', and Excel appends a column to each line
+    # which astropy then gives a default name col12 to.
+    filter_names = [x for x in effarea.dtype.names if x != "Wave" and "col" not in x]
+    abfv = ABZeroSpFluxDens
+    out = dict()
+    for bandpass in filter_names:
+        out[bandpass] = compute_count_rate(
+            flux=abfv, bandpass=bandpass, sca=sca, effarea=effarea
+        )
+
+    # Saving the SCA information to use the correct throughput curves for each detector.
+    out = {f"SCA{sca:02}": out}
+    return out
+
+
+def compute_count_rate(flux, bandpass, sca, filename=None, effarea=None, wavedist=None):
+    """Compute the count rate in a given filter, for a specified SED.
+
+    How many electrons would an object with SED given by
+    flux deposit in Roman's detectors in a second?
+
+    Parameters
+    ----------
+    flux : float or np.ndarray with shape matching wavedist.
+        Spectral flux density in units of ergs per second * hertz * cm^2
+    bandpass : str
+        the name of the bandpass
+    sca : int
+        the name of the detector. A number between 1-18.
+    filename : str
+        filename to read in
+    effarea : astropy.Table.table
+        Table from GSFC with effective areas for each filter.
+    wavedist : numpy.ndarray
+        Array of wavelengths along which spectral flux densities are defined in microns
+
+    Returns
+    -------
+    float
+        the total bandpass flux (electrons / s)
+    """
+    # Read in default Roman effective areas from Goddard, if areas not supplied
+    if effarea is None:
+        effarea = read_gsfc_effarea(sca, filename)
+
+    # If wavelength distribution is supplied, interpolate flux and area
+    # over it and the effective area table layout
+    if wavedist is not None:
+        # Ensure that wavedist and flux have the same shape
+        if wavedist.shape != flux.shape:
+            raise ValueError("wavedist and flux must have identical shapes!")
+
+        all_wavel = np.unique(np.concatenate((effarea["Wave"], wavedist)))
+        all_flux = np.interp(all_wavel, wavedist, flux)
+        all_effarea = np.interp(all_wavel, effarea["Wave"], effarea[bandpass])
+    else:
+        all_wavel = effarea["Wave"]
+        all_flux = flux
+        all_effarea = effarea[bandpass]
+
+    integrand = all_flux * constants.c / (all_wavel * u.micron) ** 2  # f_lambda
+    integrand /= constants.h * constants.c / (all_wavel * u.micron)  # hc/lambda
+    integrand *= all_effarea * u.m**2  # effective area in filter
+    # integrate.simpson looks like it loses units.  So convert to something
+    # we know about.
+    integrand = integrand.to(1 / (u.s * u.micron)).value
+
+    zpflux = integrate.simpson(integrand, x=all_wavel)
+    # effarea['Wave'] is in microns, so we're left with a number of counts
+    # per second
+
+    return zpflux
+
+
+def get_abflux(bandpass, sca):
+    """Get the zero point flux for a particular bandpass.
+
+    This is a simple wrapper for compute_abflux, caching the results.
+
+    Parameters
+    ----------
+    bandpass : str
+        the name of the bandpass
+    sca : int
+        the name of the detector. A number between 1-18.
+    Returns
+    -------
+    float
+        the zero point flux (electrons / s)
+    """
+    # bandpass = galsim2roman_bandpass.get(bandpass, bandpass)
+    bandpass = roman2galsim_bandpass.get(bandpass, bandpass)
+
+    # If abflux for this bandpass for the specified SCA has been calculated, return the calculated
+    # value instead of rerunning an expensive calculation
+    abflux = getattr(get_abflux, "abflux", None)
+    if (abflux is None) or (f"SCA{sca:02}" not in abflux):
+        abflux = compute_abflux(sca)
+        get_abflux.abflux = abflux
+
+    return abflux[f"SCA{sca:02}"][bandpass]
