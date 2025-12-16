@@ -7,7 +7,7 @@ from .parameters import default_parameters_dictionary, nborder
 __all__ = ["Gain"]
 
 # Default gain value
-gain = 1.0
+gain = 2.0
 
 
 class Gain(object):
@@ -35,9 +35,7 @@ class Gain(object):
             observatory="roman",
         )
         with asdf.open(ref_file["gain"]) as f:
-            self.gain = f["roman"]["data"][
-                nborder:-nborder, nborder:-nborder
-            ].copy()
+            self.gain = f["roman"]["data"][nborder:-nborder, nborder:-nborder].copy()
 
     def apply(self, img):
         img_arr = img.array
