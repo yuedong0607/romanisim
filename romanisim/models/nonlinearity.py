@@ -1,8 +1,8 @@
 import asdf
 import crds
+import galsim
 import numpy as np
 import roman_datamodels
-
 from astropy import units as u
 
 from .gain import gain
@@ -31,6 +31,7 @@ class Nonlinearity(object):
         self.gain = gain
         self.usecrds = usecrds
         self.metadata = metadata
+        self.coeffs = np.array([1.0, nonlinearity_beta])
         if self.usecrds:
             self._get_crds_model(metadata=self.metadata)
 
@@ -58,7 +59,7 @@ class Nonlinearity(object):
         #     ref_file
         # )
         with asdf.open(ref_file["inverselinearity"]) as f:
-            self.crds_coeffs = self._repair_coefficients(
+            self.coeffs = self._repair_coefficients(
                 coeffs=f["roman"]["coeffs"][
                     :, nborder:-nborder, nborder:-nborder
                 ].copy(),
@@ -66,9 +67,7 @@ class Nonlinearity(object):
             )
 
         with asdf.open(ref_file["gain"]) as f:
-            self.gain = f["roman"]["data"][
-                nborder:-nborder, nborder:-nborder
-            ].copy()
+            self.gain = f["roman"]["data"][nborder:-nborder, nborder:-nborder].copy()
 
     def _repair_coefficients(self, coeffs, dq):
         """Fix cases of zeros and NaNs in non-linearity coefficients.
@@ -170,7 +169,7 @@ class Nonlinearity(object):
 
         Parameters
         ----------
-        img : galsim.Image
+        img : numpy.ndarray or galsim.Image
             The observed img
 
         electrons : bool
@@ -183,17 +182,20 @@ class Nonlinearity(object):
             order that np.polyval wants them.  One can maybe save a little
             time reversing them once ahead of time.
         """
-        if not self.usecrds:
-            img.applyNonlinearity(NLfunc=NLfunc)
-        else:
+
+        if isinstance(img, galsim.Image):
             img_arr = img.array
-            if electrons:
-                img_arr = self.gain * self._evaluate_nl_polynomial(
-                    img_arr / self.gain, self.crds_coeffs, reversed
-                )
-            else:
-                img_arr = self._evaluate_nl_polynomial(
-                    img_arr, self.crds_coeffs, reversed
-                )
+        else:
+            img_arr = img
+
+        if electrons:
+            img_arr = self.gain * self._evaluate_nl_polynomial(
+                img_arr / self.gain, self.coeffs, reversed
+            )
+        else:
+            img_arr = self._evaluate_nl_polynomial(img_arr, self.coeffs, reversed)
+
+        if isinstance(img, galsim.Image):
             img.array = img_arr
-        return img
+        else:
+            img[:] = img_arr
