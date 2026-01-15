@@ -1,10 +1,8 @@
 import asdf
 import crds
+import galsim
 import numpy as np
 import roman_datamodels
-import galsim
-
-from astropy import units as u
 
 from .parameters import default_parameters_dictionary, nborder
 
@@ -35,20 +33,26 @@ class Saturation(object):
     ----------
     usecrds : bool
         Whether CRDS is used to obtain a per-pixel saturation map.
+    dq : numpy.ndarray
+        Only present if ``usecrds=True`` and ``getdq=True``. The DQ array read
+        from the CRDS dark reference, cropped by ``nborder``.
     metadata : dict or None
         Metadata overrides for CRDS lookup.
     saturation_level : float or numpy.ndarray
         Saturation threshold. Scalar if `usecrds=False`, otherwise a 2D array
         with per-pixel saturation limits.
     """
-    def __init__(self, usecrds=False, metadata=None, saturation_level=300000):
+
+    def __init__(
+        self, usecrds=False, getdq=False, metadata=None, saturation_level=300000
+    ):
         self.usecrds = usecrds
         self.metadata = metadata
         self.saturation_level = saturation_level
         if self.usecrds:
-            self._get_crds_model(metadata=self.metadata)
+            self._get_crds_model(metadata=self.metadata, getdq=getdq)
 
-    def _get_crds_model(self, metadata=None):
+    def _get_crds_model(self, getdq=False, metadata=None):
         """
         Load the Roman saturation reference file from CRDS.
 
@@ -64,11 +68,14 @@ class Saturation(object):
 
         Parameters
         ----------
+        getdq : bool, optional
+            If True, also read ``roman/dq`` from the dark reference and store it
+            as ``self.dq``.
         metadata : dict, optional
             Metadata overrides to apply before CRDS lookup. If provided, values
             are merged into the model metadata tree.
         """
-        
+
         image_mod = roman_datamodels.datamodels.ImageModel.create_fake_data()
         meta = image_mod.meta
         meta["wcs"] = None
@@ -88,6 +95,8 @@ class Saturation(object):
             self.saturation_level = f["roman"]["data"][
                 nborder:-nborder, nborder:-nborder
             ].copy()
+            if getdq:
+                self.dq = f["roman"]["dq"][nborder:-nborder, nborder:-nborder].copy()
         # self.saturation_map *= u.DN
 
     def apply(self, img):
@@ -126,7 +135,6 @@ class Saturation(object):
         else:
             img[:] = img_arr
 
-        
         # if not self.usecrds:
         #     saturation_array = np.ones_like(img.array) * self.saturation_level
         #     where_sat = np.where(img.array > saturation_array)

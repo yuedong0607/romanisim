@@ -4,7 +4,6 @@ import asdf
 import crds
 import galsim
 import roman_datamodels
-
 from astropy import units as u
 from astropy.io import ascii
 
@@ -53,6 +52,10 @@ class DarkCurrent(object):
         If True, query CRDS for Roman "dark" and "gain" reference files and
         compute a per-pixel dark rate in electrons/second. If False, use the
         module-level default (possibly updated from roman-technical-information).
+    getdq : bool, optional
+        If True and ``usecrds=True``, also read the ``roman/dq`` array from the
+        CRDS dark reference and store it as ``self.dq`` (cropped by ``nborder``).
+        Ignored when ``usecrds=False``.
     metadata : dict or None, optional
         Metadata overrides to apply before CRDS lookup. If provided, values
         are merged into the model metadata tree.
@@ -70,17 +73,20 @@ class DarkCurrent(object):
     gain : float or numpy.ndarray
         Gain used when converting CRDS dark model into electrons/sec. Defaults
         to `.gain.gain` unless overwritten by CRDS gain reference.
+    dq : numpy.ndarray
+        Only present if ``usecrds=True`` and ``getdq=True``. The DQ array read
+        from the CRDS dark reference, cropped by ``nborder``.
     rng : galsim.BaseDeviate
         RNG used for Poisson noise.
     """
 
-    def __init__(self, usecrds=False, metadata=None, rng=None, seed=None):
+    def __init__(self, usecrds=False, getdq=False, metadata=None, rng=None, seed=None):
         self.dark_rate = dark_current
         self.gain = gain
         self.usecrds = usecrds
         self.metadata = metadata
         if self.usecrds:
-            self._get_crds_model(metadata=self.metadata)
+            self._get_crds_model(metadata=self.metadata, getdq=getdq)
 
         if rng is None and seed is None:
             self.seed = 45
@@ -89,7 +95,7 @@ class DarkCurrent(object):
         else:
             self.rng = galsim.BaseDeviate(rng)
 
-    def _get_crds_model(self, metadata=None):
+    def _get_crds_model(self, getdq=False, metadata=None):
         """
         Load CRDS dark-current and gain reference files and compute dark rate.
 
@@ -106,6 +112,9 @@ class DarkCurrent(object):
 
         Parameters
         ----------
+        getdq : bool, optional
+            If True, also read ``roman/dq`` from the dark reference and store it
+            as ``self.dq``.
         metadata : dict or None, optional
             Metadata overrides applied to the fake model's `meta` before CRDS
             reference selection.
@@ -133,10 +142,10 @@ class DarkCurrent(object):
             self.dark_rate = f["roman"]["dark_slope"][
                 nborder:-nborder, nborder:-nborder
             ].copy()
+            if getdq:
+                self.dq = f["roman"]["dq"][nborder:-nborder, nborder:-nborder].copy()
         with asdf.open(ref_file["gain"]) as f:
-            self.gain = f["roman"]["data"][
-                nborder:-nborder, nborder:-nborder
-            ].copy()
+            self.gain = f["roman"]["data"][nborder:-nborder, nborder:-nborder].copy()
         self.dark_rate * u.DN / u.s
         self.dark_rate *= self.gain
         if isinstance(self.dark_rate, u.Quantity):

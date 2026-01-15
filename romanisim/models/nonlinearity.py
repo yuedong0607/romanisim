@@ -6,7 +6,7 @@ import roman_datamodels
 from astropy import units as u
 
 from .gain import gain
-from .parameters import default_parameters_dictionary, nborder
+from .parameters import default_parameters_dictionary, dqbits, nborder
 
 __all__ = ["NLfunc", "Nonlinearity"]
 
@@ -27,15 +27,59 @@ def NLfunc(x):
 
 
 class Nonlinearity(object):
-    def __init__(self, usecrds=False, metadata=None):
+    """
+    Apply Roman/WFI classical nonlinearity correction using polynomial coefficients.
+
+    The correction is represented as a per-pixel polynomial evaluated with
+    `numpy.polyval`. By default a simple 2-term polynomial is used:
+
+        y = 1 * x + beta * x^2
+
+    where ``beta`` is the module-level ``nonlinearity_beta``. When
+    ``usecrds=True``, per-pixel coefficients are loaded from the Roman CRDS
+    *inverse linearity* reference (reftype ``inverselinearity``). A gain map
+    can also be loaded from CRDS (reftype ``gain``), allowing the correction
+    to be applied to images stored in electrons.
+
+    Parameters
+    ----------
+    usecrds : bool, optional
+        If True, query CRDS and load per-pixel polynomial coefficients from the
+        ``inverselinearity`` reference and a gain map from the ``gain`` reference.
+        If False, use the module defaults.
+    getdq : bool, optional
+        If True and ``usecrds=True``, also read the DQ array from the CRDS
+        inverselinearity file and store it as ``self.dq`` (cropped by ``nborder``).
+    metadata : dict or None, optional
+        Metadata overrides to apply before CRDS lookup. If provided, values
+        are merged into the model metadata tree.
+
+    Attributes
+    ----------
+    coeffs : numpy.ndarray
+        Nonlinearity polynomial coefficients with shape ``(ncoeff, ny, nx)``.
+        Coefficients are stored in *increasing* power order
+        (constant term first), consistent with the source CRDS file and the
+        usage in `_evaluate_nl_polynomial` (which reverses by default for
+        `numpy.polyval`).
+    gain : float or numpy.ndarray
+        Gain used to convert between electrons and DN when `electrons=True` in
+        `apply()`. Defaults to `.gain.gain` unless replaced by CRDS gain map.
+    dq : numpy.ndarray or None
+        Only set when ``usecrds=True`` (and read from CRDS). If `getdq=False`,
+        may be `None`. Note: current code does not always propagate/update DQ
+        flags unless `getdq=True` is passed into `_repair_coefficients`.
+    """
+
+    def __init__(self, usecrds=False, getdq=False, metadata=None):
         self.gain = gain
         self.usecrds = usecrds
         self.metadata = metadata
         self.coeffs = np.array([1.0, nonlinearity_beta])
         if self.usecrds:
-            self._get_crds_model(metadata=self.metadata)
+            self._get_crds_model(metadata=self.metadata, getdq=getdq)
 
-    def _get_crds_model(self, metadata=None):
+    def _get_crds_model(self, getdq=False, metadata=None):
         # Inverse linearity reference files are used to apply the
         # effect of classical non-linearity when constructing
         # L1 files, and linearity reference files are used to
@@ -59,17 +103,21 @@ class Nonlinearity(object):
         #     ref_file
         # )
         with asdf.open(ref_file["inverselinearity"]) as f:
+            if getdq:
+                self.dq = f["roman"]["dq"][nborder:-nborder, nborder:-nborder].copy()
+            else:
+                self.dq = None
             self.coeffs = self._repair_coefficients(
                 coeffs=f["roman"]["coeffs"][
                     :, nborder:-nborder, nborder:-nborder
                 ].copy(),
-                dq=f["roman"]["dq"][nborder:-nborder, nborder:-nborder].copy(),
+                dq=self.dq,
             )
 
         with asdf.open(ref_file["gain"]) as f:
             self.gain = f["roman"]["data"][nborder:-nborder, nborder:-nborder].copy()
 
-    def _repair_coefficients(self, coeffs, dq):
+    def _repair_coefficients(self, coeffs, dq, getdq=False):
         """Fix cases of zeros and NaNs in non-linearity coefficients.
 
         This function replaces suspicious-looking non-linearity coefficients
@@ -86,6 +134,9 @@ class Nonlinearity(object):
         coeffs : np.ndarray[ncoeff, ny, nx] (float)
             Nonlinearity coefficients, starting with the constant term and
             increasing in power.
+        getdq : bool, optional
+            If True, additionally OR in a DQ bit (``dqbits["no_lin_corr"]``) for
+            pixels that were repaired, and store the result in ``self.dq``.
 
         dq : np.ndarray[n_resultant, ny, nx]
             Data Quality array
@@ -95,11 +146,11 @@ class Nonlinearity(object):
         coeffs : np.ndarray[ncoeff, ny, nx] (float)
             "repaired" coefficients with NaNs and weird coefficients replaced
             with linear values with slopes of unity.
-
-        dq : np.ndarray[n_resultant, ny, nx]
-            DQ array marking pixels with improper non-linearity coefficients
         """
         res = coeffs.copy()
+
+        if dq is None:
+            dq = np.zeros(coeffs.shape[1:], dtype=np.uint32)
 
         nocorrection = np.zeros(coeffs.shape[0], dtype=coeffs.dtype)
         nocorrection[1] = 1.0  # "no correction" is just normal linearity.
@@ -112,10 +163,10 @@ class Nonlinearity(object):
         res[:, m] = nocorrection[:, None]
 
         # [TODO] deal with dq
-        # lin_dq_array = np.zeros(coeffs.shape[1:], dtype=np.uint32)
-        # lin_dq_array[m] = parameters.dqbits["no_lin_corr"]
-        # dq = np.bitwise_or(dq, lin_dq_array)
-        # return res, dq
+        if getdq:
+            lin_dq_array = np.zeros(coeffs.shape[1:], dtype=np.uint32)
+            lin_dq_array[m] = dqbits["no_lin_corr"]
+            self.dq = np.bitwise_or(dq, lin_dq_array)
         return res
 
     def _evaluate_nl_polynomial(self, counts, coeffs, reversed=False):

@@ -1,5 +1,4 @@
 import numpy as np
-
 from astropy.time import Time
 
 ######################################################################################################
@@ -91,16 +90,15 @@ persistence_coefficients = (
 # parameters in the fermi model = [ A, x0, dx, a, r, half_well]
 # The following parameters are for H4RG-lo, the conservative model for low influence level x.
 # The info and implementation can be found in roman_detectors.applyPersistence() and roman_detectors.fermi_linear().
-persistence_fermi_parameters = np.array(
-    [0.017, 60000.0, 50000.0, 0.045, 1.0, 50000.0]
-)
+persistence_fermi_parameters = np.array([0.017, 60000.0, 50000.0, 0.045, 1.0, 50000.0])
+
+dqbits = dict(saturated=2, jump_det=4, nonlinear=2**16, no_lin_corr=2**20)
+dq_do_not_use = dqbits["saturated"] | dqbits["jump_det"]
 
 ######################################################################################################
 # [TODO] Temporary implementation for accessing roman-technical-information repo
 ######################################################################################################
-roman_tech_repo_path = (
-    "/hpc/home/yf194/Work/projects/roman-technical-information/"
-)
+roman_tech_repo_path = "/hpc/home/yf194/Work/projects/roman-technical-information/"
 # FPSPerformance_path = os.path.join(
 #     roman_tech_repo_path, "data", "WideFieldInstrument", "FPSPerformance"
 # )
