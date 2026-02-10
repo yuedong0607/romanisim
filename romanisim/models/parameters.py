@@ -1,6 +1,9 @@
 import numpy as np
 from astropy.time import Time
 
+# If left unspecified anywhere, define a date of simulation.
+default_date = Time("2026-01-01T00:00:00", format="isot")
+
 ######################################################################################################
 # Default values
 ######################################################################################################
@@ -9,6 +12,7 @@ diameter = 2.36  # meters
 obscuration = 0.32
 collecting_area = 3.757e4  # cm^2, from Cycle 7
 exptime = 139.8  # s
+read_time = 3.16247  # s
 # nonlinearity_beta = -6.0e-7
 # reciprocity_alpha = 0.0065
 n_dithers = 6
@@ -21,6 +25,12 @@ n_pix_tot = 4096
 n_pix = 4088
 jitter_rms = 0.014
 charge_diffusion = 0.1
+
+# Initial detector reset level in electrons (before non-linearity is applied).
+pedestal = 10000  # electron
+
+# Extra noise in the pedestal/reset level in electrons (correlated across all resultants).
+pedestal_extra_noise = 8  # electron
 
 # Basic Roman reference info, with lengths in mm.
 pixel_size_mm = 0.01
@@ -387,6 +397,17 @@ read_pattern = {
         [41, 42, 43],
         [44],
     ],
+}
+
+reference_data = {
+    "dark": 0.01,  # electron/s
+    "distortion": None,
+    "flat": None,
+    "gain": 2,  # electron/DN
+    "inverselinearity": None,
+    "linearity": None,
+    "readnoise": 5.0,  # DN
+    "saturation": 55000,  # DN
 }
 
 default_parameters_dictionary = {
