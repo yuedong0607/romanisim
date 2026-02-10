@@ -3,6 +3,7 @@ import crds
 import galsim
 import numpy as np
 import roman_datamodels
+
 from astropy import units as u
 
 from .gain import gain
@@ -71,11 +72,20 @@ class Nonlinearity(object):
         flags unless `getdq=True` is passed into `_repair_coefficients`.
     """
 
-    def __init__(self, usecrds=False, getdq=False, metadata=None):
+    def __init__(
+        self,
+        usecrds=False,
+        reftype="inverselinearity",
+        getdq=False,
+        metadata=None,
+        saturation=None,
+    ):
         self.gain = gain
         self.usecrds = usecrds
         self.metadata = metadata
         self.coeffs = np.array([1.0, nonlinearity_beta])
+        self.saturation = saturation
+        self.reftype = reftype
         if self.usecrds:
             self._get_crds_model(metadata=self.metadata, getdq=getdq)
 
@@ -96,15 +106,17 @@ class Nonlinearity(object):
 
         ref_file = crds.getreferences(
             image_mod.get_crds_parameters(),
-            reftypes=["inverselinearity", "gain"],
+            reftypes=[self.reftype, "gain"],
             observatory="roman",
         )
         # self.crds_model = roman_datamodels.datamodels.InverselinearityRefModel(
         #     ref_file
         # )
-        with asdf.open(ref_file["inverselinearity"]) as f:
+        with asdf.open(ref_file[self.reftype]) as f:
             if getdq:
-                self.dq = f["roman"]["dq"][nborder:-nborder, nborder:-nborder].copy()
+                self.dq = f["roman"]["dq"][
+                    nborder:-nborder, nborder:-nborder
+                ].copy()
             else:
                 self.dq = None
             self.coeffs = self._repair_coefficients(
@@ -115,7 +127,9 @@ class Nonlinearity(object):
             )
 
         with asdf.open(ref_file["gain"]) as f:
-            self.gain = f["roman"]["data"][nborder:-nborder, nborder:-nborder].copy()
+            self.gain = f["roman"]["data"][
+                nborder:-nborder, nborder:-nborder
+            ].copy()
 
     def _repair_coefficients(self, coeffs, dq, getdq=False):
         """Fix cases of zeros and NaNs in non-linearity coefficients.
@@ -239,14 +253,21 @@ class Nonlinearity(object):
         else:
             img_arr = img
 
+        if self.saturation is not None:
+            img_arr = np.clip(img_arr, -1000, self.saturation)
+
         if electrons:
             img_arr = self.gain * self._evaluate_nl_polynomial(
                 img_arr / self.gain, self.coeffs, reversed
             )
         else:
-            img_arr = self._evaluate_nl_polynomial(img_arr, self.coeffs, reversed)
+            img_arr = self._evaluate_nl_polynomial(
+                img_arr, self.coeffs, reversed
+            )
 
         if isinstance(img, galsim.Image):
             img.array = img_arr
         else:
             img[:] = img_arr
+
+        return img
