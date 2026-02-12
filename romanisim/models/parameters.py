@@ -1,4 +1,5 @@
 import numpy as np
+
 from astropy.time import Time
 
 # If left unspecified anywhere, define a date of simulation.
@@ -97,10 +98,25 @@ persistence_coefficients = (
     / 100.0
 )
 
+# persistence parameter dictionary
+# delete persistence records fainter than 0.01 electron / s
+# e.g., MA table 1 has ~144 s, so this is ~1 electron over the whole exposure.
+persistence = dict(
+    A=0.017,
+    x0=6.0e4,
+    dx=5.0e4,
+    alpha=0.045,
+    gamma=1,
+    half_well=50000,
+    ignorerate=0.01,
+)
+
 # parameters in the fermi model = [ A, x0, dx, a, r, half_well]
 # The following parameters are for H4RG-lo, the conservative model for low influence level x.
 # The info and implementation can be found in roman_detectors.applyPersistence() and roman_detectors.fermi_linear().
-persistence_fermi_parameters = np.array([0.017, 60000.0, 50000.0, 0.045, 1.0, 50000.0])
+persistence_fermi_parameters = np.array(
+    [0.017, 60000.0, 50000.0, 0.045, 1.0, 50000.0]
+)
 
 dqbits = dict(saturated=2, jump_det=4, nonlinear=2**16, no_lin_corr=2**20)
 dq_do_not_use = dqbits["saturated"] | dqbits["jump_det"]
@@ -108,7 +124,9 @@ dq_do_not_use = dqbits["saturated"] | dqbits["jump_det"]
 ######################################################################################################
 # [TODO] Temporary implementation for accessing roman-technical-information repo
 ######################################################################################################
-roman_tech_repo_path = "/hpc/home/yf194/Work/projects/roman-technical-information/"
+roman_tech_repo_path = (
+    "/hpc/home/yf194/Work/projects/roman-technical-information/"
+)
 # FPSPerformance_path = os.path.join(
 #     roman_tech_repo_path, "data", "WideFieldInstrument", "FPSPerformance"
 # )
@@ -124,6 +142,7 @@ roman_tech_repo_path = "/hpc/home/yf194/Work/projects/roman-technical-informatio
 # Default configuration parameters
 ######################################################################################################
 
+# Rev F
 read_pattern = {
     3: [
         [1],
@@ -417,7 +436,7 @@ default_parameters_dictionary = {
         "optical_element": "F184",
     },
     "ephemeris": {
-        "time": Time("2026-01-01").mjd,
+        "time": default_date.mjd,
         "spatial_x": 0.0,
         "spatial_y": 0.0,
         "spatial_z": 0.0,
@@ -426,12 +445,11 @@ default_parameters_dictionary = {
         "velocity_z": 0.0,
     },
     "exposure": {
-        "start_time": Time("2026-01-01T00:00:00"),
+        "start_time": default_date,
         "type": "WFI_IMAGE",
         "ma_table_number": 4,
         "read_pattern": read_pattern[4],
-        # Changing the default MA table to be 4 (C2A_IMG_HLWAS)
-        # as MA table 1 (DEFOCUS_MOD) is not supported
+        # Changing the default MA table to be 4 (C2A_IMG_HLWAS) as MA table 1 (DEFOCUS_MOD) is not supported
     },
     "pointing": {
         "target_ra": 270.0,
