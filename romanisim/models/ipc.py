@@ -9,15 +9,23 @@ from .parameters import default_parameters_dictionary
 
 __all__ = ["IPC"]
 
-# Default IPC kernel
-# IPC kernel is unnormalized at first.  We will normalize it.
-ipc_kernel = np.array(
-    [
-        [0.001269938, 0.015399776, 0.001199862],
-        [0.013800177, 1.0, 0.015600367],
-        [0.001270391, 0.016129619, 0.001200137],
-    ]
-)
+# # Default IPC kernel
+# # IPC kernel is unnormalized at first.  We will normalize it.
+# ipc_kernel = np.array(
+#     [
+#         [0.001269938, 0.015399776, 0.001199862],
+#         [0.013800177, 1.0, 0.015600367],
+#         [0.001270391, 0.016129619, 0.001200137],
+#     ]
+# )
+# ipc_kernel /= np.sum(ipc_kernel)
+
+# from draft wfisim documentation
+# assumed to be compatible in direction with scipy.ndimage.convolve.
+# this is consistent with Andrea Bellini's convention, where, in the
+# following kernel, 0.2% of the flux is redistributed to the pixel
+# that is +1 - N spaces ahead in memory.
+ipc_kernel = np.array([[0.21, 1.66, 0.22], [1.88, 91.59, 1.87], [0.21, 1.62, 0.2]])
 ipc_kernel /= np.sum(ipc_kernel)
 
 
@@ -115,10 +123,18 @@ class IPC(object):
         else:
             img_arr = img
 
-        img_arr = ndimage.convolve(
-            img_arr, self.ipc_kernel, mode=edge_treatment, cval=fill_value
-        )
+        if img_arr.ndim == 2:
+            img_arr = ndimage.convolve(
+                img_arr, self.ipc_kernel, mode=edge_treatment, cval=fill_value
+            )
+        elif img_arr.ndim == 3:  # Convolution on 3D resultants
+            img_arr = ndimage.convolve(
+                img_arr,
+                self.ipc_kernel[None, ...],
+                mode=edge_treatment,
+                cval=fill_value,
+            )
         if isinstance(img, galsim.Image):
             img.array = img_arr
         else:
-            img[:] = img_arr
+            img = img_arr

@@ -268,6 +268,5 @@ class Nonlinearity(object):
         if isinstance(img, galsim.Image):
             img.array = img_arr
         else:
-            img[:] = img_arr
-
+            img = img_arr
         return img
