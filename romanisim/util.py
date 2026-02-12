@@ -1,33 +1,36 @@
-"""Miscellaneous utility routines.
-"""
+"""Miscellaneous utility routines."""
 
-import numpy as np
-from astropy.coordinates import SkyCoord, get_body_barycentric_posvel
-from astropy import units as u
-from astropy.time import Time
-import galsim
-import gwcs as gwcsmod
-
-from romanisim import parameters, wcs, bandpass
-from romanisim.velocity_aberration import compute_va_effects
-from scipy import integrate
 from collections.abc import Mapping
 
-__all__ = ["skycoord",
-           "celestialcoord",
-           "scalergb",
-           "random_points_in_cap",
-           "random_points_in_king",
-           "random_points_at_radii",
-           "add_more_metadata",
-           "update_pointing_and_wcsinfo_metadata",
-           "king_profile",
-           "sample_king_distances",
-           "decode_context_times",
-           "default_image_meta",
-           "update_photom_keywords",
-           "merge_dicts",
-           "calc_scale_factor",
+import galsim
+import gwcs as gwcsmod
+import numpy as np
+
+from astropy import units as u
+from astropy.coordinates import SkyCoord, get_body_barycentric_posvel
+from astropy.time import Time
+from scipy import integrate
+
+from romanisim import bandpass  # , parameters, wcs
+from romanisim.models import parameters, wcs
+from romanisim.velocity_aberration import compute_va_effects
+
+__all__ = [
+    "skycoord",
+    "celestialcoord",
+    "scalergb",
+    "random_points_in_cap",
+    "random_points_in_king",
+    "random_points_at_radii",
+    "add_more_metadata",
+    "update_pointing_and_wcsinfo_metadata",
+    "king_profile",
+    "sample_king_distances",
+    "decode_context_times",
+    "default_image_meta",
+    "update_photom_keywords",
+    "merge_dicts",
+    "calc_scale_factor",
 ]
 
 
@@ -47,9 +50,11 @@ def skycoord(celestial):
     if isinstance(celestial, SkyCoord):
         return celestial
     else:
-        return SkyCoord(ra=(celestial.ra / galsim.radians) * u.rad,
-                        dec=(celestial.dec / galsim.radians) * u.rad,
-                        frame='icrs')
+        return SkyCoord(
+            ra=(celestial.ra / galsim.radians) * u.rad,
+            dec=(celestial.dec / galsim.radians) * u.rad,
+            frame="icrs",
+        )
 
 
 def celestialcoord(sky):
@@ -68,8 +73,10 @@ def celestialcoord(sky):
     if isinstance(sky, galsim.CelestialCoord):
         return sky
     else:
-        return galsim.CelestialCoord(sky.ra.to(u.rad).value * galsim.radians,
-                                     sky.dec.to(u.rad).value * galsim.radians)
+        return galsim.CelestialCoord(
+            sky.ra.to(u.rad).value * galsim.radians,
+            sky.dec.to(u.rad).value * galsim.radians,
+        )
 
 
 def scalergb(rgb, scales=None, gray=0):
@@ -97,7 +104,9 @@ def scalergb(rgb, scales=None, gray=0):
     if scales is not None:
         for i in range(3):
             rgb[:, :, i] = rgb[:, :, i] / scales[i] + gray
-    intensity = np.sum(np.clip(rgb, 0, np.inf), axis=2)  # how much light is there?
+    intensity = np.sum(
+        np.clip(rgb, 0, np.inf), axis=2
+    )  # how much light is there?
     Q = 20  # taken from legacyviewer
     fI = np.arcsinh(Q * intensity) / np.sqrt(Q)
     intensity += (intensity == 0) * 1e-6
@@ -128,7 +137,7 @@ def random_points_in_cap(coord, radius, nobj, rng=None):
     if rng is None:
         rng = galsim.UniformDeviate()
 
-    dist = np.zeros(nobj, dtype='f8')
+    dist = np.zeros(nobj, dtype="f8")
     rng.generate(dist)
     dist = np.arccos(1 - (1 - np.cos(np.radians(radius))) * dist) * u.rad
     return random_points_at_radii(coord, dist, rng=rng)
@@ -179,10 +188,10 @@ def random_points_at_radii(coord, radii, rng=None):
     if rng is None:
         rng = galsim.UniformDeviate()
 
-    ang = np.zeros(len(radii), dtype='f8')
+    ang = np.zeros(len(radii), dtype="f8")
     rng.generate(ang)
     ang *= 2 * np.pi
-    c1 = SkyCoord(coord.ra.rad * u.rad, coord.dec.rad * u.rad, frame='icrs')
+    c1 = SkyCoord(coord.ra.rad * u.rad, coord.dec.rad * u.rad, frame="icrs")
     c1 = c1.directional_offset_by(ang * u.rad, radii)
     return c1
 
@@ -200,65 +209,73 @@ def add_more_metadata(metadata, usecrds=False):
     # fill out the metadata a bit with redundant stuff for which we
     # already mostly have the answer.
 
-    if 'exposure' not in metadata.keys():
-        metadata['exposure'] = {}
-    if 'guide_star' not in metadata.keys():
-        metadata['guide_star'] = {}
-    manum = metadata['exposure']['ma_table_number']
-    metadata['exposure']['ma_table_id'] = f'SCI{manum:04d}'
+    if "exposure" not in metadata.keys():
+        metadata["exposure"] = {}
+    if "guide_star" not in metadata.keys():
+        metadata["guide_star"] = {}
+    manum = metadata["exposure"]["ma_table_number"]
+    metadata["exposure"]["ma_table_id"] = f"SCI{manum:04d}"
 
     matab = None
-    if getattr(parameters, 'ma_table_reference', None):
+    if getattr(parameters, "ma_table_reference", None):
         matab = parameters.ma_table_reference
 
     if matab is None and usecrds:
-        raise ValueError('ma table reference file is not loaded!')
+        raise ValueError("ma table reference file is not loaded!")
 
     if usecrds:
-        tmatab = matab['roman']['science_tables'][f'SCI{manum:04}']
-        metadata['exposure']['frame_time'] = tmatab['frame_time']
+        tmatab = matab["roman"]["science_tables"][f"SCI{manum:04}"]
+        metadata["exposure"]["frame_time"] = tmatab["frame_time"]
 
         # nrsultant in the metadata is defined from set_metadata in ris_make_utils.py
-        nresultants = metadata['exposure']['nresultants']
-        read_pattern = metadata['exposure'].get(
-            'read_pattern',
-            tmatab['science_read_pattern'][nresultants-1])
-        openshuttertime = metadata['exposure']['frame_time'] * read_pattern[-1][-1]
+        nresultants = metadata["exposure"]["nresultants"]
+        read_pattern = metadata["exposure"].get(
+            "read_pattern", tmatab["science_read_pattern"][nresultants - 1]
+        )
+        openshuttertime = (
+            metadata["exposure"]["frame_time"] * read_pattern[-1][-1]
+        )
 
-        metadata['exposure']['exposure_time'] = (
-            tmatab['accumulated_exposure_time'][nresultants - 1])
-        metadata['exposure']['effective_exposure_time'] = (
-            tmatab['effective_exposure_time'][nresultants - 1])
+        metadata["exposure"]["exposure_time"] = tmatab[
+            "accumulated_exposure_time"
+        ][nresultants - 1]
+        metadata["exposure"]["effective_exposure_time"] = tmatab[
+            "effective_exposure_time"
+        ][nresultants - 1]
     else:
-        metadata['exposure']['frame_time'] = parameters.read_time
+        metadata["exposure"]["frame_time"] = parameters.read_time
 
-        read_pattern = metadata['exposure'].get(
-            'read_pattern',
-            parameters.read_pattern[metadata['exposure']['ma_table_number']])
+        read_pattern = metadata["exposure"].get(
+            "read_pattern",
+            parameters.read_pattern[metadata["exposure"]["ma_table_number"]],
+        )
         openshuttertime = parameters.read_time * read_pattern[-1][-1]
 
-        metadata['exposure']['exposure_time'] = round(openshuttertime, 4)
-        effexptime = parameters.read_time * (np.mean(read_pattern[-1]))        
-        metadata['exposure']['effective_exposure_time'] = round(effexptime, 4)
+        metadata["exposure"]["exposure_time"] = round(openshuttertime, 4)
+        effexptime = parameters.read_time * (np.mean(read_pattern[-1]))
+        metadata["exposure"]["effective_exposure_time"] = round(effexptime, 4)
 
-    offsets = dict(start=0 * u.s, mid=openshuttertime * u.s / 2,
-                end=openshuttertime * u.s)
-    starttime = metadata['exposure']['start_time']
+    offsets = dict(
+        start=0 * u.s, mid=openshuttertime * u.s / 2, end=openshuttertime * u.s
+    )
+    starttime = metadata["exposure"]["start_time"]
     if not isinstance(starttime, Time):
-        starttime = Time(starttime, format='isot')
+        starttime = Time(starttime, format="isot")
     for prefix, offset in offsets.items():
-        metadata['exposure'][f'{prefix}_time'] = Time((
-            starttime + offset).isot)
+        metadata["exposure"][f"{prefix}_time"] = Time(
+            (starttime + offset).isot
+        )
 
-    if 'window_xstart' in metadata['guide_star']:
-        metadata['guide_star']['window_xstop'] = (
-            metadata['guide_star']['window_xstart'] + 16)
-        metadata['guide_star']['window_ystop'] = (
-            metadata['guide_star']['window_ystart'] + 16)
-    if 'visit' not in metadata.keys():
-        metadata['visit'] = dict()
-    metadata['visit']['status'] = 'SUCCESSFUL'
-
+    if "window_xstart" in metadata["guide_star"]:
+        metadata["guide_star"]["window_xstop"] = (
+            metadata["guide_star"]["window_xstart"] + 16
+        )
+        metadata["guide_star"]["window_ystop"] = (
+            metadata["guide_star"]["window_ystart"] + 16
+        )
+    if "visit" not in metadata.keys():
+        metadata["visit"] = dict()
+    metadata["visit"]["status"] = "SUCCESSFUL"
 
 
 def update_pointing_and_wcsinfo_metadata(metadata, gwcs):
@@ -278,23 +295,24 @@ def update_pointing_and_wcsinfo_metadata(metadata, gwcs):
     gwcs : WCS object
         image WCS
     """
-    if 'pointing' not in metadata or 'wcsinfo' not in metadata:
+    if "pointing" not in metadata or "wcsinfo" not in metadata:
         return
     if isinstance(gwcs, wcs.GWCS):
         gwcs = gwcs.wcs
     if not isinstance(gwcs, gwcsmod.wcs.WCS):
         return
-    metadata['wcsinfo']['aperture_name'] = (
-        metadata['instrument']['detector'] + '_FULL')
-    distortion = gwcs.get_transform('detector', 'v2v3')
+    metadata["wcsinfo"]["aperture_name"] = (
+        metadata["instrument"]["detector"] + "_FULL"
+    )
+    distortion = gwcs.get_transform("detector", "v2v3")
     center = (galsim.roman.n_pix / 2 - 0.5, galsim.roman.n_pix / 2 - 0.5)
     v2v3 = distortion(*center)
     radec = gwcs(*center)
-    t2sky = gwcs.get_transform('v2v3', 'world')
+    t2sky = gwcs.get_transform("v2v3", "world")
     radecn = t2sky(v2v3[0], v2v3[1] + 100)
-    roll_ref = (
-        SkyCoord(radec[0] * u.deg, radec[1] * u.deg).position_angle(
-        SkyCoord(radecn[0] * u.deg, radecn[1] * u.deg)))
+    roll_ref = SkyCoord(radec[0] * u.deg, radec[1] * u.deg).position_angle(
+        SkyCoord(radecn[0] * u.deg, radecn[1] * u.deg)
+    )
     roll_ref = roll_ref.to(u.deg).value
     # new roll ref appropriate for new v2v3 ref
     # note: some of this logic will need to change after
@@ -305,25 +323,25 @@ def update_pointing_and_wcsinfo_metadata(metadata, gwcs):
     # whether we need to change radec ref, v2v3 ref depends
     # on how we ultimately define these quantities.
 
-    metadata['wcsinfo']['ra_ref'] = radec[0]
-    metadata['wcsinfo']['dec_ref'] = radec[1]
-    metadata['wcsinfo']['v2_ref'] = v2v3[0]
-    metadata['wcsinfo']['v3_ref'] = v2v3[1]
-    metadata['wcsinfo']['roll_ref'] = roll_ref
+    metadata["wcsinfo"]["ra_ref"] = radec[0]
+    metadata["wcsinfo"]["dec_ref"] = radec[1]
+    metadata["wcsinfo"]["v2_ref"] = v2v3[0]
+    metadata["wcsinfo"]["v3_ref"] = v2v3[1]
+    metadata["wcsinfo"]["roll_ref"] = roll_ref
 
     boresight = t2sky(0, 0)
-    metadata['pointing']['ra_v1'] = boresight[0]
-    metadata['pointing']['dec_v1'] = boresight[1]
+    metadata["pointing"]["ra_v1"] = boresight[0]
+    metadata["pointing"]["dec_v1"] = boresight[1]
     boresightn = t2sky(0, 1)
-    pa_v3 = (
-        SkyCoord(boresight[0] * u.deg, boresight[1] * u.deg).position_angle(
-        SkyCoord(boresightn[0] * u.deg, boresightn[1] * u.deg)))
+    pa_v3 = SkyCoord(
+        boresight[0] * u.deg, boresight[1] * u.deg
+    ).position_angle(SkyCoord(boresightn[0] * u.deg, boresightn[1] * u.deg))
     pa_v3 = pa_v3.to(u.deg).value
-    metadata['pointing']['pa_v3'] = pa_v3
+    metadata["pointing"]["pa_v3"] = pa_v3
 
     # Update velocity aberration meta for the reference point
-    metadata['velocity_aberration']['ra_reference'] = radec[0]
-    metadata['velocity_aberration']['dec_reference'] = radec[1]
+    metadata["velocity_aberration"]["ra_reference"] = radec[0]
+    metadata["velocity_aberration"]["dec_reference"] = radec[1]
 
 
 def king_profile(r, rc, rt):
@@ -343,7 +361,9 @@ def king_profile(r, rc, rt):
     rho : np.ndarray[float]
         2D number density of stars at r.
     """
-    return (1 / np.sqrt(1 + (r / rc)**2) - 1 / np.sqrt(1 + (rt / rc)**2))**2
+    return (
+        1 / np.sqrt(1 + (r / rc) ** 2) - 1 / np.sqrt(1 + (rt / rc) ** 2)
+    ) ** 2
 
 
 def sample_king_distances(rc, rt, npts, rng=None):
@@ -366,7 +386,7 @@ def sample_king_distances(rc, rt, npts, rng=None):
         Distances distributed according to a King (1962) profile.
     """
     rng = galsim.UniformDeviate(rng)
-    rr = np.zeros(npts, dtype='f4')
+    rr = np.zeros(npts, dtype="f4")
     rng.generate(rr)
     logx = np.linspace(np.log(rc) - 4, np.log(rt), 1000)
     x = np.concatenate([[0], np.exp(logx)])
@@ -436,14 +456,16 @@ def decode_context_times(context, exptimes):
 
     for y in range(total_exptimes.shape[0]):
         for x in range(total_exptimes.shape[1]):
-            files = [v & (1 << k) for v in context[:, y, x] for k in range(nbits)]
+            files = [
+                v & (1 << k) for v in context[:, y, x] for k in range(nbits)
+            ]
             tot_time = 0
             files = [file for file in files if (file != 0)]
 
             for im_idx in files:
                 tot_time += exptimes[im_idx - 1]
 
-            total_exptimes[y,x] = tot_time
+            total_exptimes[y, x] = tot_time
 
     def sum_times(x):
         tot_time = 0
@@ -461,8 +483,9 @@ def decode_context_times(context, exptimes):
     return total_exptimes
 
 
-def default_image_meta(time=None, ma_table=4, filter_name='F087',
-                       detector='WFI01', coord=None):
+def default_image_meta(
+    time=None, ma_table=4, filter_name="F087", detector="WFI01", coord=None
+):
     """Return some simple default metadata for input to image.simulate
 
     Parameters
@@ -485,25 +508,22 @@ def default_image_meta(time=None, ma_table=4, filter_name='F087',
     """
 
     if time is None:
-        time = Time('2020-01-01T00:00:00')
+        time = Time("2020-01-01T00:00:00")
     if coord is None:
         coord = SkyCoord(270 * u.deg, 66 * u.deg)
 
     meta = {
-        'exposure': {
-            'start_time': time,
-            'ma_table_number': 4,
+        "exposure": {
+            "start_time": time,
+            "ma_table_number": 4,
         },
-        'instrument': {
-            'optical_element': filter_name,
-            'detector': 'WFI01'
-        },
-        'wcsinfo': {
-            'ra_ref': coord.ra.to(u.deg).value,
-            'dec_ref': coord.dec.to(u.deg).value,
-            'v2_ref': 0,
-            'v3_ref': 0,
-            'roll_ref': 0,
+        "instrument": {"optical_element": filter_name, "detector": "WFI01"},
+        "wcsinfo": {
+            "ra_ref": coord.ra.to(u.deg).value,
+            "dec_ref": coord.dec.to(u.deg).value,
+            "v2_ref": 0,
+            "v3_ref": 0,
+            "roll_ref": 0,
         },
     }
 
@@ -531,28 +551,41 @@ def update_photom_keywords(im, gain=None):
     gain : float or np.ndarray, optional
         Gain in electron/DN (scalar or image)
     """
-    gain = (np.median(gain)
-            if gain is not None else parameters.reference_data['gain'])
-    if 'wcs' in im['meta']:
-        wcs = im['meta']['wcs']
+    gain = (
+        np.median(gain)
+        if gain is not None
+        else parameters.reference_data["gain"]
+    )
+    if "wcs" in im["meta"]:
+        wcs = im["meta"]["wcs"]
         cenpix = (im.data.shape[0] // 2, im.data.shape[1] // 2)
         cc = wcs.pixel_to_world(
             (cenpix[0], cenpix[0], cenpix[0] + 1),
-            (cenpix[1], cenpix[1] + 1, cenpix[1]))
-        angle = (cc[0].position_angle(cc[1]) -
-                 cc[0].position_angle(cc[2]))
-        area = (cc[0].separation(cc[1]) * cc[0].separation(cc[2])
-                * np.sin(angle.to(u.rad).value))
-        im['meta']['photometry']['pixel_area'] = area.to(u.sr).value
-        val = (gain * (3631 / bandpass.get_abflux(
-             im.meta['instrument']['optical_element'], int(im.meta['instrument']['detector'][-2:])) /
-             10 ** 6 / im['meta']['photometry']['pixel_area']))
-        im['meta']['photometry']['conversion_megajanskys'] = val
-        im['meta']['photometry']['conversion_microjanskys'] = (
-            val * u.MJy / u.sr).to(u.uJy / u.arcsec ** 2).value
+            (cenpix[1], cenpix[1] + 1, cenpix[1]),
+        )
+        angle = cc[0].position_angle(cc[1]) - cc[0].position_angle(cc[2])
+        area = (
+            cc[0].separation(cc[1])
+            * cc[0].separation(cc[2])
+            * np.sin(angle.to(u.rad).value)
+        )
+        im["meta"]["photometry"]["pixel_area"] = area.to(u.sr).value
+        val = gain * (
+            3631
+            / bandpass.get_abflux(
+                im.meta["instrument"]["optical_element"],
+                int(im.meta["instrument"]["detector"][-2:]),
+            )
+            / 10**6
+            / im["meta"]["photometry"]["pixel_area"]
+        )
+        im["meta"]["photometry"]["conversion_megajanskys"] = val
+        im["meta"]["photometry"]["conversion_microjanskys"] = (
+            (val * u.MJy / u.sr).to(u.uJy / u.arcsec**2).value
+        )
 
-    im['meta']['photometry']['conversion_megajanskys_uncertainty'] = 0
-    im['meta']['photometry']['conversion_microjanskys_uncertainty'] = 0
+    im["meta"]["photometry"]["conversion_megajanskys_uncertainty"] = 0
+    im["meta"]["photometry"]["conversion_microjanskys_uncertainty"] = 0
 
 
 def merge_dicts(a, b):
@@ -577,7 +610,11 @@ def merge_dicts(a, b):
         a, mutated to contain keys from b.
     """
     for key in b:
-        if key in a and isinstance(a[key], Mapping) and isinstance(b[key], Mapping):
+        if (
+            key in a
+            and isinstance(a[key], Mapping)
+            and isinstance(b[key], Mapping)
+        ):
             merge_dicts(a[key], b[key])
         else:
             a[key] = b[key]
@@ -607,7 +644,7 @@ def calc_scale_factor(date, ra, dec):
     scale_factor : float
         The velocity aberration scale factor
     """
-    _, velocity = get_body_barycentric_posvel('earth', date)
+    _, velocity = get_body_barycentric_posvel("earth", date)
     velocity = 1.01 * velocity  # Move from earth to Roman.
     xyz_velocity = velocity.xyz.to(u.km / u.s)
     scale_factor, _, _ = compute_va_effects(*xyz_velocity.value, ra, dec)
